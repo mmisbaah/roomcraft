@@ -5,9 +5,9 @@ import { useStore, edgesOf } from '../store';
 import { distPointSeg } from './geometry';
 import { ITEM_INDEX } from '../data/items';
 
-/** Nudge step — matches the store's 0.25 m placement snap. */
-const STEP = 0.25;
-/** Shift = one metre per press. */
+/** Fine nudge step — 0.1 m for precise positioning. */
+const FINE_STEP = 0.1;
+/** Shift = one metre per press (coarse). */
 const COARSE = 1;
 
 type DirProvider = (() => { dx: number; dy: number }) | undefined;
@@ -32,7 +32,8 @@ export function objectHotkey(e: KeyboardEvent, dirMap?: Record<string, DirProvid
   const st = useStore.getState();
   if (!st.selected) return false;
 
-  const step = e.shiftKey ? COARSE : STEP;
+  // Default to fine step (0.1 m); Shift = coarse (1 m)
+  const step = e.shiftKey ? COARSE : FINE_STEP;
   let dx = 0;
   let dy = 0;
 
@@ -130,5 +131,5 @@ export function objectHotkey(e: KeyboardEvent, dirMap?: Record<string, DirProvid
   }
 
   e.preventDefault(); // arrows must not scroll the page mid-nudge
-  return st.tryMove(it.uid, it.x + dx, it.y + dy);
+  return st.tryMoveFine(it.uid, it.x + dx, it.y + dy);
 }

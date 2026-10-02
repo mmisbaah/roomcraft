@@ -6,6 +6,8 @@ import { distPointSeg, polyArea, polyCentroid, rotatedSize } from './logic/geome
 import { blockWall, buildGrid, CELL, type Grid } from './logic/grid';
 import {
   canPlace,
+  canPlaceManual,
+  canPlaceRaw,
   findBestSpot,
   nextWallSpot,
   projectToWall,
@@ -148,6 +150,8 @@ export interface AppState {
 
   addItem: (itemId: string) => void;
   tryMove: (uid: string, x: number, y: number) => boolean;
+  tryMoveFine: (uid: string, x: number, y: number) => boolean;
+  tryMoveRaw: (uid: string, x: number, y: number) => boolean;
   rotateSelected: () => void;
   duplicateSelected: () => void;
   removeSelected: () => void;
@@ -601,6 +605,91 @@ export const useStore = create<AppState>((set, get) => ({
     if (!canPlace(st.grid, st.room, st.items, ITEM_INDEX, item, sx, sy, target.rot, uid)) return false;
     set({
       items: st.items.map((i) => (i.uid === uid ? { ...i, x: sx, y: sy } : i)),
+    });
+    return true;
+  },
+
+  /** Fine-grained move for keyboard nudges (0.1 m snap instead of 0.25 m). */
+  tryMoveFine: (uid, x, y) => {
+    const st = get();
+    if (!st.grid || !st.room) return false;
+    const target = st.items.find((i) => i.uid === uid);
+    if (!target) return false;
+    const item = ITEM_INDEX.get(target.itemId);
+    if (!item) return false;
+    const edges = edgesOf(st.room, st.openings, st.walls);
+
+    if (item.mount === 'wall') {
+      const spot = projectToWall(st.room, edges, item, x, y);
+      if (!spot) return false;
+      if (!canPlace(st.grid, st.room, st.items, ITEM_INDEX, item, spot.x, spot.y, spot.rot, uid))
+        return false;
+      set({
+        items: st.items.map((i) => (i.uid === uid ? { ...i, x: spot.x, y: spot.y, rot: spot.rot } : i)),
+      });
+      return true;
+    }
+
+    // 0.1 m snap for fine control
+    const sx = Math.round(x / 0.1) * 0.1;
+    const sy = Math.round(y / 0.1) * 0.1;
+    if (item.mount === 'ceiling') {
+      const clash = st.items.some((o) => {
+        if (o.uid === uid) return false;
+        const of = ITEM_INDEX.get(o.itemId);
+        return (
+          of &&
+          of.mount === 'ceiling' &&
+          Math.hypot(o.x - sx, o.y - sy) < ((of.w + item.w) / 2) * 0.8
+        );
+      });
+      if (clash) return false;
+    }
+    // Skip door-approach clearance for manual fine moves — AI Fill still uses 0.91 m
+    if (!canPlaceManual(st.grid, st.room, st.items, ITEM_INDEX, item, sx, sy, target.rot, uid)) return false;
+    set({
+      items: st.items.map((i) => (i.uid === uid ? { ...i, x: sx, y: sy } : i)),
+    });
+    return true;
+  },
+
+  /** Raw move for drag operations — no snap, no door clearance, just collision + walls. */
+  tryMoveRaw: (uid, x, y) => {
+    const st = get();
+    if (!st.grid || !st.room) return false;
+    const target = st.items.find((i) => i.uid === uid);
+    if (!target) return false;
+    const item = ITEM_INDEX.get(target.itemId);
+    if (!item) return false;
+    const edges = edgesOf(st.room, st.openings, st.walls);
+
+    if (item.mount === 'wall') {
+      const spot = projectToWall(st.room, edges, item, x, y);
+      if (!spot) return false;
+      if (!canPlace(st.grid, st.room, st.items, ITEM_INDEX, item, spot.x, spot.y, spot.rot, uid))
+        return false;
+      set({
+        items: st.items.map((i) => (i.uid === uid ? { ...i, x: spot.x, y: spot.y, rot: spot.rot } : i)),
+      });
+      return true;
+    }
+
+    if (item.mount === 'ceiling') {
+      const clash = st.items.some((o) => {
+        if (o.uid === uid) return false;
+        const of = ITEM_INDEX.get(o.itemId);
+        return (
+          of &&
+          of.mount === 'ceiling' &&
+          Math.hypot(o.x - x, o.y - y) < ((of.w + item.w) / 2) * 0.8
+        );
+      });
+      if (clash) return false;
+    }
+    // Only basic collision + wall check — no door clearance, no grid snap
+    if (!canPlaceRaw(st.grid, st.room, st.items, ITEM_INDEX, item, x, y, target.rot, uid)) return false;
+    set({
+      items: st.items.map((i) => (i.uid === uid ? { ...i, x, y } : i)),
     });
     return true;
   },

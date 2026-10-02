@@ -107,6 +107,7 @@ export default function Scene3D() {
   const walls = useStore((s) => s.walls);
   const select = useStore((s) => s.select);
   const tryMove = useStore((s) => s.tryMove);
+  const tryMoveRaw = useStore((s) => s.tryMoveRaw);
 
   // Keyboard: arrows/WASD nudge the selection, R rotates, Del removes —
   // the same shortcuts as the 2D view (which unmounts while 3D is shown).
@@ -202,7 +203,7 @@ export default function Scene3D() {
         ))}
         <Suspense fallback={null}>
           {items.map((p) => (
-            <Furniture key={p.uid} p={p} onSelect={select} onMove={tryMove} />
+            <Furniture key={p.uid} p={p} onSelect={select} onMove={tryMoveRaw} />
           ))}
         </Suspense>
       </group>

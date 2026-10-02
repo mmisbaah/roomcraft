@@ -7,4 +7,12 @@ export default defineConfig({
     host: true,
     port: 5173,
   },
+  css: {
+    postcss: {},
+    preprocessorOptions: {},
+    // Use esbuild for CSS minification instead of lightningcss
+  },
+  build: {
+    cssMinify: 'esbuild',
+  },
 });

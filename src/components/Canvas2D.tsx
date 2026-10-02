@@ -1002,7 +1002,7 @@ export default function Canvas2D() {
 
     if (dragRef.current) {
       dragRef.current.moved = true;
-      st.tryMove(dragRef.current.uid, p.x - dragRef.current.ox, p.y - dragRef.current.oy);
+      st.tryMoveRaw(dragRef.current.uid, p.x - dragRef.current.ox, p.y - dragRef.current.oy);
       draw();
       return;
     }

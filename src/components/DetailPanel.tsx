@@ -21,14 +21,14 @@ export default function DetailPanel() {
   const setColorIdx = useStore((s) => s.setColorIdx);
   const aiFill = useStore((s) => s.aiFill);
   const select = useStore((s) => s.select);
-  const tryMove = useStore((s) => s.tryMove);
+  const tryMoveFine = useStore((s) => s.tryMoveFine);
 
   const placed = items.find((i) => i.uid === selected);
   const item = placed ? ITEM_INDEX.get(placed.itemId) : null;
 
-  /** Precise touch/pointer nudge — same 0.25 m snap as arrow keys and dragging. */
+  /** Precise touch/pointer nudge — 0.1 m snap for fine control. */
   const nudge = (dx: number, dy: number) => {
-    if (placed) tryMove(placed.uid, placed.x + dx, placed.y + dy);
+    if (placed) tryMoveFine(placed.uid, placed.x + dx, placed.y + dy);
   };
 
   const windowCount = openings.filter((o) => o === 'window').length;
