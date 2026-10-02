@@ -14,30 +14,30 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
-          
+
       - name: Install dependencies
-        run: npm ci
-        
-      - name: Build app
+        run: npm install
+
+      - name: Build web app
         run: npm run build
-        
+
       - name: Build Electron app
-        run: npm run electron:build
+        run: npx electron-builder --win --x64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: RoomCraft-Windows
-          path: dist-electron/
-          retention-days: 7
+          path: dist-electron/*.exe
+          retention-days: 30
 
   release:
     needs: build
@@ -48,11 +48,11 @@ jobs:
         with:
           name: RoomCraft-Windows
           path: dist-electron
-          
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: dist-electron/**
+          files: dist-electron/*.exe
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
