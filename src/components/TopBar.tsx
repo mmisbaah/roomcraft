@@ -31,6 +31,10 @@ export default function TopBar() {
   const setWallBuild = useStore((s) => s.setWallBuild);
   const wallSnap = useStore((s) => s.wallSnap);
   const setWallSnap = useStore((s) => s.setWallSnap);
+  const wallDraft = useStore((s) => s.wallDraft);
+  const wallGrab = useStore((s) => s.wallGrab);
+  const grabWallPoint = useStore((s) => s.grabWallPoint);
+  const finishWallGrab = useStore((s) => s.finishWallGrab);
   const setUpgradeOpen = useStore((s) => s.setUpgradeOpen);
   const toastMsg = useStore((s) => s.toastMsg);
   const saveProject = useStore((s) => s.saveProject);
@@ -101,6 +105,26 @@ export default function TopBar() {
                 }
               >
                 {wallSnap === 'free' ? '✏️ Free' : '📐 Align'}
+              </button>
+            )}
+            {/* ✊ Grab / ✓ Done — the one control that has to work for every
+                input. With a point held it turns into the commit button, so a
+                touch user needs nothing else: tap the point itself also lets
+                go, and Esc still puts it back. */}
+            {wallBuild && !!wallDraft?.length && (
+              <button
+                className={`btn ${wallGrab ? 'primary' : 'ghost'}`}
+                onClick={() => (wallGrab ? finishWallGrab() : grabWallPoint())}
+                disabled={!wallGrab && !!wallDraft && wallDraft.length < 2}
+                title={
+                  wallGrab
+                    ? 'Keep this point (also Enter or right-click)'
+                    : wallDraft && wallDraft.length < 2
+                      ? 'Lay a second point first — there is no wall to correct yet'
+                      : 'Move the last wall point (Enter or right-click to keep it, Esc to undo)'
+                }
+              >
+                {wallGrab ? '✓ Done' : '✊ Grab'}
               </button>
             )}
           </>

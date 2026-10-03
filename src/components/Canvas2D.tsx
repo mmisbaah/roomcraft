@@ -126,6 +126,12 @@ export default function Canvas2D() {
   const viewRef = useRef<View>({ zoom: 1, panX: 0, panY: 0 });
   const dragRef = useRef<{ uid: string; ox: number; oy: number; moved: boolean } | null>(null);
   const panRef = useRef<{ sx: number; sy: number; px: number; py: number; moved: boolean } | null>(null);
+  /**
+   * Active "finish move" drag. `onPoint` records that the press landed on the
+   * grabbed point itself, which is what separates a deliberate tap-to-release
+   * from a drag that merely began near it.
+   */
+  const grabMoveRef = useRef<{ sx: number; sy: number; onPoint: boolean; moved: boolean } | null>(null);
   /** Active pointers — two fingers turn a gesture into pinch-zoom / two-finger pan. */
   const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const pinchRef = useRef<{
@@ -158,6 +164,7 @@ export default function Canvas2D() {
   const walls = useStore((s) => s.walls);
   const wallBuild = useStore((s) => s.wallBuild);
   const wallDraft = useStore((s) => s.wallDraft);
+  const wallGrab = useStore((s) => s.wallGrab);
   const wallSnap = useStore((s) => s.wallSnap);
 
   // ---------------------------------------------------------------- drawing
@@ -603,12 +610,14 @@ export default function Canvas2D() {
     // close hint
     if (st.wallBuild && st.wallDraft?.length) {
       const chain = st.wallDraft;
-      // Preview exactly where the click would land (vertex / source-wall /
-      // aligned-axis snap), so alignment with the starting wall is visible
-      // before committing.
-      const target = cursor
-        ? snapWallPoint(cursor, st.rooms.map((r) => r.poly), st.walls, chain, st.wallRef, st.wallSnap)
-        : null;
+      const grab = st.wallGrab;
+      // While a point is held, the rubber band would compete with the dragged
+      // point for attention, so it is dropped: there is no click to preview
+      // until the move is finished.
+      const target =
+        grab || !cursor
+          ? null
+          : snapWallPoint(cursor, st.rooms.map((r) => r.poly), st.walls, chain, st.wallRef, st.wallSnap);
       ctx.strokeStyle = '#4f6df5';
       ctx.lineWidth = 5;
       ctx.lineJoin = 'round';
@@ -619,18 +628,28 @@ export default function Canvas2D() {
       if (target) ctx.lineTo(sx(target.x), sy(target.y));
       ctx.stroke();
       chain.forEach((p, i) => {
+        const held = grab?.index === i;
         const isClose =
           i === 0 &&
           chain.length >= 3 &&
           cursor &&
           Math.hypot(cursor.x - p.x, cursor.y - p.y) < 0.4;
-        ctx.fillStyle = isClose ? '#16a34a' : i === 0 ? '#4f6df5' : '#ffffff';
-        ctx.strokeStyle = '#4f6df5';
-        ctx.lineWidth = 2.5;
+        ctx.fillStyle = held ? '#f97316' : isClose ? '#16a34a' : i === 0 ? '#4f6df5' : '#ffffff';
+        ctx.strokeStyle = held ? '#c2410c' : '#4f6df5';
+        // The held point is drawn larger and with a halo so it reads as
+        // "this one is in your hand" from across the room.
+        ctx.lineWidth = held ? 3.5 : 2.5;
         ctx.beginPath();
-        ctx.arc(sx(p.x), sy(p.y), isClose ? 8 : 5, 0, Math.PI * 2);
+        ctx.arc(sx(p.x), sy(p.y), held ? 9 : isClose ? 8 : 5, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
+        if (held) {
+          ctx.beginPath();
+          ctx.arc(sx(p.x), sy(p.y), 14, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(249,115,22,0.45)';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
       });
       ctx.lineJoin = 'miter';
     }
@@ -731,9 +750,13 @@ export default function Canvas2D() {
   }, []);
 
   // redraw on state changes / resize
+  //
+  // wallGrab has to be listed: grabbing and letting go only change that field,
+  // so without it the held point never gets its highlight and the canvas looks
+  // frozen at the moment the user is trying to aim it.
   useEffect(() => {
     draw();
-  }, [draw, rooms, activeRoomId, draft, items, selected, grid, mode, edgeEdit, walls, wallBuild, wallDraft, wallSnap]);
+  }, [draw, rooms, activeRoomId, draft, items, selected, grid, mode, edgeEdit, walls, wallBuild, wallDraft, wallGrab, wallSnap]);
 
   // reset view when a new room appears
   useEffect(() => {
@@ -941,6 +964,15 @@ export default function Canvas2D() {
     if (overlayOpen()) return;
     const st = useStore.getState();
     if (st.wallBuild) {
+      // A held point is finished first — right-click while grabbing means
+      // "keep this point", not "commit the whole chain". Pressing it again
+      // then commits the chain as before.
+      if (st.wallGrab) {
+        st.finishWallGrab();
+        hideCtxMenu();
+        draw();
+        return;
+      }
       // right-click ends the wall chain (or exits the tool)
       if (st.wallDraft?.length) st.finishWallDraft();
       hideCtxMenu();
@@ -988,6 +1020,21 @@ export default function Canvas2D() {
     // Record the intended action now, but only commit it on a clean
     // pointer-up — dragging still pans the view.
     if (st.wallBuild) {
+      // A grabbed point is being finished: this press belongs to the move, not
+      // to the chain. Dragging carries the point, a clean tap on the point
+      // releases it, and a clean tap anywhere else does nothing at all rather
+      // than quietly appending a wall while the user was still adjusting.
+      if (st.wallGrab && st.wallDraft) {
+        const held = st.wallDraft[st.wallGrab.index];
+        grabMoveRef.current = {
+          sx: e.clientX,
+          sy: e.clientY,
+          onPoint: held ? Math.hypot(p.x - held.x, p.y - held.y) < 0.35 : false,
+          moved: false,
+        };
+        draw();
+        return;
+      }
       if (st.wallDraft?.length) {
         wallPendingRef.current = { kind: 'add', p }; // extend / close the chain
       } else {
@@ -1074,6 +1121,18 @@ export default function Canvas2D() {
     cursorRef.current = p;
 
     if (st.wallBuild) {
+      // "Finish move" takes precedence over panning: while a point is held the
+      // gesture belongs to that point, so the press carries it instead of
+      // sliding the view out from under the adjustment.
+      const gm = grabMoveRef.current;
+      if (gm && st.wallGrab) {
+        if (!gm.moved && Math.abs(e.clientX - gm.sx) + Math.abs(e.clientY - gm.sy) > 4) gm.moved = true;
+        if (gm.moved) {
+          st.moveWallGrab(p);
+          draw();
+          return;
+        }
+      }
       // drag pans the view; a clean hover highlights removable walls
       if (panRef.current) {
         const dx = e.clientX - panRef.current.sx;
@@ -1133,6 +1192,15 @@ export default function Canvas2D() {
     if (dragRef.current && !dragRef.current.moved) {
       // plain click — selection already handled on down
     }
+    // ✊ tap the held point (without dragging) to let go of it. This is the
+    // touch-friendly finish: no right-click and no Enter on a tablet.
+    const gm = grabMoveRef.current;
+    grabMoveRef.current = null;
+    if (gm && !gm.moved && gm.onPoint && st.wallGrab) {
+      st.finishWallGrab();
+      draw();
+      return;
+    }
     // 🧱 commit the wall action only if the pointer didn't pan/drag
     const pending = wallPendingRef.current;
     if (pending && !panRef.current?.moved) {
@@ -1163,6 +1231,11 @@ export default function Canvas2D() {
     draftPendingRef.current = null;
     dragRef.current = null;
     panRef.current = null;
+    // An interrupted drag just ends the gesture. The point stays where it was
+    // moved to and the grab stays live, so the user can carry on or press Esc
+    // to put it back — an OS-level pointer cancel must not silently discard
+    // their adjustment.
+    grabMoveRef.current = null;
   };
 
   const onWheel = (e: React.WheelEvent) => {
@@ -1193,12 +1266,23 @@ export default function Canvas2D() {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       const st = useStore.getState();
-      if (e.key === 'Enter' && st.draft) {
+      if (e.key === 'Enter' && st.wallGrab) {
+        // Enter finishes a held wall point. With nothing held it commits the
+        // chain, matching Esc — so the keyboard can do the whole wall job.
+        st.finishWallGrab();
+        draw();
+      } else if (e.key === 'Enter' && st.wallBuild && st.wallDraft?.length) {
+        st.finishWallDraft();
+        draw();
+      } else if (e.key === 'Enter' && st.draft) {
         st.closeDraft();
         draw();
       } else if (e.key === 'Escape') {
         hideCtxMenu();
-        if (st.wallDraft?.length) st.finishWallDraft();
+        // Esc backs out one step: undo the held point's move before it gives up
+        // the whole chain, so a mis-grab is one key away from being undone.
+        if (st.wallGrab) st.cancelWallGrab();
+        else if (st.wallDraft?.length) st.finishWallDraft();
         else if (st.wallBuild) st.setWallBuild(false);
         else if (st.draft) st.cancelDraft();
         else if (st.upgradeOpen) st.setUpgradeOpen(false);
@@ -1215,13 +1299,15 @@ export default function Canvas2D() {
   }, [draw]);
 
   const st = useStore();
-  const cursorStyle = st.wallBuild
-    ? 'crosshair'
-    : st.mode === 'draw' && !st.rooms.length
+  const cursorStyle = st.wallGrab
+    ? 'grabbing'
+    : st.wallBuild
       ? 'crosshair'
-      : dragRef.current
-        ? 'grabbing'
-        : 'grab';
+      : st.mode === 'draw' && !st.rooms.length
+        ? 'crosshair'
+        : dragRef.current
+          ? 'grabbing'
+          : 'grab';
 
   return (
     <div className="canvas-wrap" ref={wrapRef}>
@@ -1272,7 +1358,7 @@ export default function Canvas2D() {
       </div>
       {st.wallBuild && (
         <div className="canvas-hint accent">
-          🧱 Click the ground to lay walls — they align to the wall you start from · <b>click a wall</b> to remove it · <b>Esc</b>/right-click finishes the chain
+          🧱 Click the ground to lay walls — they align to the wall you start from · <b>✊ Grab</b> then drag to move the last point (<b>✓ Done</b>, <b>Enter</b> or right-click keeps it, <b>Esc</b> puts it back) · <b>click a wall</b> to remove it
         </div>
       )}
       {st.mode === 'draw' && st.rooms.length && !st.edgeEdit && !st.wallBuild && (

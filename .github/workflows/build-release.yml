@@ -41,6 +41,7 @@ jobs:
           npm run test:walls
           npm run test:rooms
           npm run test:presets
+          npm run test:grab
 
       - name: Build web app
         run: npm run build

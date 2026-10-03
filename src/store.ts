@@ -158,6 +158,13 @@ export interface AppState {
   /** Chain of snapped points for the wall currently being drawn. */
   wallDraft: Vec2[] | null;
   /**
+   * The chain point currently being repositioned, with where it was before the
+   * move so Esc can put it back exactly. Only ever set for the last clicked
+   * point — the ✊ Grab button stops there — because that is the one the user
+   * has just placed and most often got slightly wrong.
+   */
+  wallGrab: { index: number; orig: Vec2 } | null;
+  /**
    * Angle (rad) of the wall the current chain is drawn from; null = started on
    * free ground (falls back to the global 45° axes). Every segment of the
    * chain snaps to `wallRef + k*45°`, so new walls stay parallel / square to
@@ -193,6 +200,10 @@ export interface AppState {
   setWallSnap: (m: WallSnapMode) => void;
   addWallPoint: (p: Vec2) => void;
   finishWallDraft: () => void;
+  grabWallPoint: () => void;
+  moveWallGrab: (p: Vec2) => void;
+  finishWallGrab: () => void;
+  cancelWallGrab: () => void;
   removeWall: (id: string) => void;
   select: (uid: string | null) => void;
   setUpgradeOpen: (v: boolean) => void;
@@ -403,6 +414,7 @@ export const useStore = create<AppState>((set, get) => ({
   walls: [],
   wallBuild: false,
   wallDraft: null,
+  wallGrab: null,
   wallRef: null,
   wallSnap: 'align',
   upgradeOpen: false,
@@ -423,7 +435,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({
       mode: m,
       selected: m === '3d' ? null : st.selected,
-      ...(m === '3d' ? { wallBuild: false, wallDraft: null, wallRef: null } : {}),
+      ...(m === '3d' ? { wallBuild: false, wallDraft: null, wallGrab: null, wallRef: null } : {}),
     });
   },
   setTier: (t) => set({ tier: t }),
@@ -522,7 +534,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   setEdgeEdit: (v) => {
     if (v && get().wallDraft) get().finishWallDraft();
-    set(v ? { edgeEdit: true, wallBuild: false, wallDraft: null, wallRef: null } : { edgeEdit: false });
+    set(v ? { edgeEdit: true, wallBuild: false, wallDraft: null, wallGrab: null, wallRef: null } : { edgeEdit: false });
   },
 
   // -------------------------------------------------------------- 🧱 walls
@@ -531,8 +543,8 @@ export const useStore = create<AppState>((set, get) => ({
     if (!v && get().wallDraft) get().finishWallDraft();
     set(
       v
-        ? { wallBuild: true, wallDraft: null, wallRef: null, edgeEdit: false, selected: null }
-        : { wallBuild: false, wallDraft: null, wallRef: null },
+        ? { wallBuild: true, wallDraft: null, wallGrab: null, wallRef: null, edgeEdit: false, selected: null }
+        : { wallBuild: false, wallDraft: null, wallGrab: null, wallRef: null },
     );
   },
   addWallPoint: (p) => {
@@ -544,7 +556,7 @@ export const useStore = create<AppState>((set, get) => ({
     // segment of the chain stays aligned to that wall.
     if (!pts.length) {
       const { pt, ref } = startWallPoint(p, roomPolys(st), st.walls, st.wallSnap);
-      set({ wallDraft: [pt], wallRef: ref });
+      set({ wallDraft: [pt], wallGrab: null, wallRef: ref });
       toast(
         get,
         set,
@@ -563,7 +575,7 @@ export const useStore = create<AppState>((set, get) => ({
     // closing segment becomes a real wall, then commit — finishWallDraft
     // recognises the repeated start point and turns the loop into a room.
     if (pts.length >= 3 && dist2(p, first) < CLOSE_RADIUS * CLOSE_RADIUS) {
-      set({ wallDraft: [...pts, first] });
+      set({ wallDraft: [...pts, first], wallGrab: null });
       get().finishWallDraft();
       return;
     }
@@ -576,7 +588,63 @@ export const useStore = create<AppState>((set, get) => ({
       get().finishWallDraft();
       return;
     }
-    set({ wallDraft: [...pts, q] });
+    // A new point supersedes the grab: there is nothing left to re-position
+    // once the user has carried on past it.
+    set({ wallDraft: [...pts, q], wallGrab: null });
+  },
+  /**
+   * Pick up the last clicked wall point so it can be re-positioned.
+   *
+   * Only the newest point is grabbable — it is the one the user has just placed
+   * and most often wants to nudge, and keeping the target fixed means the
+   * button needs no second tap to say which point it means. Grabbing with a
+   * single-point chain is pointless (there is no segment to correct), so it is
+   * refused.
+   */
+  grabWallPoint: () => {
+    const st = get();
+    if (!st.wallBuild || !st.wallDraft || st.wallDraft.length < 2) return;
+    const index = st.wallDraft.length - 1;
+    set({ wallGrab: { index, orig: { ...st.wallDraft[index] } } });
+    toast(get, set, 'Grabbed the last wall point — move it, then ✓ Done, Enter or right-click.');
+  },
+  /**
+   * Re-snap and store the grabbed point.
+   *
+   * The chain handed to the snapper stops just short of the grabbed point, so
+   * its last element — the anchor — is the point before it. That makes the
+   * grabbed point snap exactly as it did when first placed: same 45° lattice
+   * against the same previous segment, same corner and T-junction rules. The
+   * only difference from a fresh click is that the user's own point is absent
+   * from the vertex list, so it cannot snap back onto itself.
+   */
+  moveWallGrab: (p) => {
+    const st = get();
+    const grab = st.wallGrab;
+    if (!grab || !st.wallDraft) return;
+    const pts = st.wallDraft;
+    if (grab.index >= pts.length) return;
+    const q = snapWallPoint(p, roomPolys(st), st.walls, pts.slice(0, grab.index), st.wallRef, st.wallSnap);
+    const next = [...pts];
+    next[grab.index] = q;
+    set({ wallDraft: next });
+  },
+  /** Commit the move and let drawing carry on from the new position. */
+  finishWallGrab: () => {
+    set({ wallGrab: null });
+    toast(get, set, 'Wall point moved — click to keep drawing.');
+  },
+  /** Abandon the move and put the point back exactly where it was. */
+  cancelWallGrab: () => {
+    const st = get();
+    const grab = st.wallGrab;
+    if (!grab || !st.wallDraft || grab.index >= st.wallDraft.length) {
+      set({ wallGrab: null });
+      return;
+    }
+    const next = [...st.wallDraft];
+    next[grab.index] = grab.orig;
+    set({ wallDraft: next, wallGrab: null });
   },
   /**
    * Commit the wall chain. When the chain came back to its own start the loop
@@ -589,7 +657,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (!st.wallDraft) return;
     const pts = st.wallDraft;
     if (pts.length < 2) {
-      set({ wallDraft: null, wallRef: null });
+      set({ wallDraft: null, wallGrab: null, wallRef: null });
       return;
     }
     // A chain whose last point sits back on its first point has closed a loop.
@@ -606,38 +674,41 @@ export const useStore = create<AppState>((set, get) => ({
       walls.push({ id, a: path[i - 1], b: path[i], kind: 'wall' });
     }
 
+    const outline = closed ? path : null;
+
+    // A closed loop's walls are absorbed into the room outline — but only once
+    // the loop is known to be a valid room. If it is too small, or it lands on a
+    // room that is already there, the user drew those walls either way and they
+    // have to survive as free-built partitions. Deciding this *before* the wall
+    // list is rewritten is the whole point: doing it afterwards deleted the
+    // walls and then announced that they had been kept.
+    const clean = outline ? cleanPolygon(outline) : null;
+    const clash = clean ? get().rooms.find((r) => polysOverlap(clean as Vec2[], r.poly)) : undefined;
+
     // The room is the enclosed floor, so the walls that form it become part of
     // the room outline rather than staying as free-built partitions.
-    const outline = closed ? path : null;
-    const remaining = loopWallIds.size
+    const remaining = clean && !clash && loopWallIds.size
       ? walls.filter((w) => !loopWallIds.has(w.id))
       : walls;
 
-    set({ wallDraft: null, wallRef: null, walls: remaining });
+    set({ wallDraft: null, wallGrab: null, wallRef: null, walls: remaining });
     if (!outline) {
       const st2 = get();
       set({ grid: st2.rooms.length ? makeGrid(st2.rooms, remaining) : st2.grid });
       toast(get, set, 'Wall finished.');
       return;
     }
-
-    // A room from the loop, plus any earlier rooms on the plan. If the outline
-    // can't become a room, the walls stay as free-built partitions rather than
-    // being thrown away — the user drew them either way.
-    const clean = cleanPolygon(outline);
     if (!clean) {
       const st3 = get();
-      set({ grid: st3.rooms.length ? makeGrid(st3.rooms, walls) : st3.grid });
-      toast(get, set, 'Wall loop closed — but it is too small to be a room.');
+      set({ grid: st3.rooms.length ? makeGrid(st3.rooms, remaining) : st3.grid });
+      toast(get, set, 'Wall loop closed — too small to be a room, so it stayed walls.');
       return;
     }
-    for (const r of get().rooms) {
-      if (polysOverlap(clean, r.poly)) {
-        const st4 = get();
-        set({ grid: st4.rooms.length ? makeGrid(st4.rooms, walls) : st4.grid });
-        toast(get, set, 'Wall loop closed — it overlaps an existing room, so it stayed walls.');
-        return;
-      }
+    if (clash) {
+      const st4 = get();
+      set({ grid: st4.rooms.length ? makeGrid(st4.rooms, remaining) : st4.grid });
+      toast(get, set, 'Wall loop closed — it overlaps an existing room, so it stayed walls.');
+      return;
     }
     const room: Room = {
       id: nextRoomId(),
@@ -705,6 +776,7 @@ export const useStore = create<AppState>((set, get) => ({
       edgeEdit: false,
       walls: [],
       wallDraft: null,
+      wallGrab: null,
       wallRef: null,
       wallBuild: false,
     }),
@@ -1074,6 +1146,7 @@ export const useStore = create<AppState>((set, get) => ({
         selected: null,
         draft: null,
         wallDraft: null,
+        wallGrab: null,
         wallRef: null,
         wallBuild: false,
       });
@@ -1099,6 +1172,7 @@ export const useStore = create<AppState>((set, get) => ({
       mode: 'furnish',
       edgeEdit: false,
       wallDraft: null,
+      wallGrab: null,
       wallRef: null,
       wallBuild: false,
     });
