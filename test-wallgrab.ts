@@ -307,12 +307,16 @@ console.log('\nA loop too small to be a room keeps its walls:');
 {
   // Regression: the loop's walls used to be deleted before the outline was
   // validated, so this path announced "it stayed walls" after discarding them.
+  // Free snapping so the loop is exactly 1.5 x 1.5 — under the 4 m² a room
+  // must be, but well clear of the snapping steps that would shrink a 30 cm
+  // square into a single point.
   fresh();
-  lay([0, 0], [0.3, 0], [0.3, 0.3]);
+  S().setWallSnap('free');
+  lay([0, 0], [1.5, 0], [1.5, 1.5], [0, 1.5]);
   S().addWallPoint({ x: 0, y: 0 });
   attempt('no room is made', () => ({ pass: S().rooms.length === 0, detail: `${S().rooms.length}` }));
-  attempt('but both walls survive', () => ({
-    pass: S().walls.length === 2,
+  attempt('but all four walls survive', () => ({
+    pass: S().walls.length === 4,
     detail: `${S().walls.length} walls`,
   }));
   attempt('and the chain is cleared', () => ({ pass: S().wallDraft === null }));

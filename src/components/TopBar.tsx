@@ -129,14 +129,19 @@ export default function TopBar() {
             )}
           </>
         )}
-        {mode === 'furnish' && room && (
+        {/* Which room, and what it is for.
+            Shown in every 2D mode, not just furnish: saying "this one is a
+            kitchen" is something you want to do while you are still drawing its
+            walls, and the type is what AI Fill later reads to pick furniture —
+            so leaving it until after furnishing meant guessing. */}
+        {mode !== '3d' && room && (
           <>
             {rooms.length > 1 && (
               <select
                 className="kind-select"
                 value={room.id}
                 onChange={(e) => setActiveRoom(e.target.value)}
-                title="Which room to furnish"
+                title="Which room"
               >
                 {rooms.map((r) => (
                   <option key={r.id} value={r.id}>
@@ -149,7 +154,7 @@ export default function TopBar() {
               className="kind-select"
               value={roomKind}
               onChange={(e) => setRoomKind(e.target.value as RoomKind)}
-              title="Room type for AI Fill"
+              title="Room type — this is what AI Fill furnishes"
             >
               {ROOM_KIND_ORDER.map((k) => (
                 <option key={k} value={k}>
@@ -157,6 +162,10 @@ export default function TopBar() {
                 </option>
               ))}
             </select>
+          </>
+        )}
+        {mode === 'furnish' && room && (
+          <>
             <button className="btn primary" onClick={aiFill}>
               ✨ AI Fill
             </button>

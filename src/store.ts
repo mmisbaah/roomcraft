@@ -12,6 +12,7 @@ import {
   rotatedSize,
 } from './logic/geometry';
 import { blockWall, buildGridFor, CELL, type Grid } from './logic/grid';
+import { findEnclosedFaces } from './logic/enclose';
 import {
   CLOSE_RADIUS,
   dist2,
@@ -662,76 +663,117 @@ export const useStore = create<AppState>((set, get) => ({
     }
     // A chain whose last point sits back on its first point has closed a loop.
     // Drop that repeated point: the room outline must not carry a zero-length
-    // edge, and the segments either side already form the closing wall.
+    // edge.
     const closed = pts.length >= 4 && dist2(pts[pts.length - 1], pts[0]) < CLOSE_RADIUS * CLOSE_RADIUS;
     const path = closed ? pts.slice(0, -1) : pts;
 
     const walls = [...st.walls];
-    const loopWallIds = new Set<string>();
-    for (let i = 1; i < path.length; i++) {
+    const newIds = new Set<string>();
+    const addWall = (a: Vec2, b: Vec2) => {
       const id = nextWallId();
-      loopWallIds.add(id);
-      walls.push({ id, a: path[i - 1], b: path[i], kind: 'wall' });
+      newIds.add(id);
+      walls.push({ id, a, b, kind: 'wall' });
+    };
+    for (let i = 1; i < path.length; i++) addWall(path[i - 1], path[i]);
+    // An explicitly closed chain gets its closing wall too, so that case is
+    // just another enclosed loop rather than a special case of its own.
+    if (closed) addWall(path[path.length - 1], path[0]);
+
+    // Whatever these walls have now boxed in becomes a room. This is what
+    // catches the everyday case: three sides drawn fresh while the fourth
+    // belongs to the room next door, so the loop closes without the user ever
+    // clicking back to their own start point. Existing rooms contribute their
+    // outlines to the search for the same reason — they own real edges that
+    // close loops. Only faces involving a wall from this chain count, so a
+    // leftover loop elsewhere on the plan cannot ambush the user.
+    const roomEdges = get().rooms.flatMap((r) =>
+      r.poly.map((p, i) => ({ id: `room:${r.id}:${i}`, a: p, b: r.poly[(i + 1) % r.poly.length] })),
+    );
+    const faces = findEnclosedFaces(walls, roomEdges).filter((f) =>
+      f.wallIds.some((id) => newIds.has(id)),
+    );
+
+    // A loop's walls are absorbed into the room outline — but only once the loop
+    // is known to be a valid room. If it is too small, or it lands on a room
+    // that is already there, the user drew those walls either way and they have
+    // to survive as free-built partitions. Deciding this *before* the wall list
+    // is rewritten is the whole point: doing it afterwards deleted the walls and
+    // then announced that they had been kept.
+    const wallIds = new Set(walls.map((w) => w.id));
+    const consumed = new Set<string>();
+    const made: Room[] = [];
+    let tooSmall = 0;
+    let clashCount = 0;
+    for (const f of faces) {
+      const clean = cleanPolygon(f.poly);
+      if (!clean) {
+        tooSmall++;
+        continue;
+      }
+      if ([...get().rooms, ...made].some((r) => polysOverlap(clean, r.poly))) {
+        clashCount++;
+        continue;
+      }
+      // Room-outline edges helped find this face but are not free walls, so
+      // only real wall ids may be removed.
+      for (const id of f.wallIds) if (wallIds.has(id)) consumed.add(id);
+      made.push({
+        id: nextRoomId(),
+        poly: clean,
+        openings: suggestOpenings(clean),
+        kind: 'living',
+        name: '',
+        note: '',
+      });
     }
 
-    const outline = closed ? path : null;
+    const remaining = walls.filter((w) => !consumed.has(w.id));
+    const rooms = [...get().rooms, ...made];
 
-    // A closed loop's walls are absorbed into the room outline — but only once
-    // the loop is known to be a valid room. If it is too small, or it lands on a
-    // room that is already there, the user drew those walls either way and they
-    // have to survive as free-built partitions. Deciding this *before* the wall
-    // list is rewritten is the whole point: doing it afterwards deleted the
-    // walls and then announced that they had been kept.
-    const clean = outline ? cleanPolygon(outline) : null;
-    const clash = clean ? get().rooms.find((r) => polysOverlap(clean as Vec2[], r.poly)) : undefined;
+    set({
+      wallDraft: null,
+      wallGrab: null,
+      wallRef: null,
+      walls: remaining,
+      ...(made.length
+        ? {
+            rooms,
+            activeRoomId: made[0].id,
+            // Ask what the room is for straight away: that is what picks the
+            // furniture, so a room with no type is a room waiting to be wrong.
+            pendingRoomId: made[0].id,
+            mode: 'furnish' as const,
+            selected: null,
+          }
+        : {}),
+      grid: rooms.length ? makeGrid(rooms, remaining) : st.grid,
+    });
 
-    // The room is the enclosed floor, so the walls that form it become part of
-    // the room outline rather than staying as free-built partitions.
-    const remaining = clean && !clash && loopWallIds.size
-      ? walls.filter((w) => !loopWallIds.has(w.id))
-      : walls;
-
-    set({ wallDraft: null, wallGrab: null, wallRef: null, walls: remaining });
-    if (!outline) {
-      const st2 = get();
-      set({ grid: st2.rooms.length ? makeGrid(st2.rooms, remaining) : st2.grid });
-      toast(get, set, 'Wall finished.');
+    if (made.length === 1) {
+      toast(
+        get,
+        set,
+        `Room created — ${polyArea(made[0].poly).toFixed(1)} m². Name it and pick its type, then AI Fill.`,
+      );
       return;
     }
-    if (!clean) {
-      const st3 = get();
-      set({ grid: st3.rooms.length ? makeGrid(st3.rooms, remaining) : st3.grid });
+    if (made.length > 1) {
+      toast(
+        get,
+        set,
+        `${made.length} rooms created — name them and pick their types, then AI Fill.`,
+      );
+      return;
+    }
+    if (tooSmall) {
       toast(get, set, 'Wall loop closed — too small to be a room, so it stayed walls.');
       return;
     }
-    if (clash) {
-      const st4 = get();
-      set({ grid: st4.rooms.length ? makeGrid(st4.rooms, remaining) : st4.grid });
+    if (clashCount) {
       toast(get, set, 'Wall loop closed — it overlaps an existing room, so it stayed walls.');
       return;
     }
-    const room: Room = {
-      id: nextRoomId(),
-      poly: clean,
-      openings: suggestOpenings(clean),
-      kind: 'living',
-      name: '',
-      note: '',
-    };
-    const rooms = [...get().rooms, room];
-    set({
-      rooms,
-      activeRoomId: room.id,
-      pendingRoomId: room.id,
-      grid: makeGrid(rooms, remaining),
-      mode: 'furnish',
-      selected: null,
-    });
-    toast(
-      get,
-      set,
-      `Room created — ${polyArea(clean).toFixed(1)} m². Name it and pick its type, then AI Fill.`,
-    );
+    toast(get, set, 'Wall finished.');
   },
   removeWall: (id) => {
     const st = get();

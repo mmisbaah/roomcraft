@@ -42,6 +42,8 @@ jobs:
           npm run test:rooms
           npm run test:presets
           npm run test:grab
+          npm run test:enclose
+          npm run test:wallroom
 
       - name: Build web app
         run: npm run build

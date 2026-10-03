@@ -117,10 +117,43 @@ export function cleanPolygon(poly: Vec2[]): Vec2[] | null {
   return out;
 }
 
+/** Distance below which a point counts as sitting on a polygon's boundary. */
+const ON_EDGE = 1e-6;
+
+function onBoundary(p: Vec2, poly: Vec2[]): boolean {
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    if (distPointSeg(p, poly[j], poly[i]) <= ON_EDGE) return true;
+  }
+  return false;
+}
+
 /**
- * Do two polygons share interior area? True when any edge of one crosses the
- * other, or when one is entirely swallowed by the other (no crossing edges but
- * still overlapping floor).
+ * A point strictly inside the polygon, or null when one cannot be found.
+ *
+ * Needed because a ray-cast from a point lying exactly on someone's boundary
+ * gives an arbitrary answer: fired from a vertex on the far wall it escapes
+ * through the opposite edge and reports "inside". Testing a genuinely interior
+ * point instead is what makes two rooms that share a wall read as separate
+ * rather than as one on top of the other.
+ */
+function interiorPoint(poly: Vec2[]): Vec2 | null {
+  const c = polyCentroid(poly);
+  if (pointInPoly(c, poly) && !onBoundary(c, poly)) return c;
+  // Concave outline: the centroid can land outside, so try the edges too.
+  for (let i = 0; i < poly.length; i++) {
+    const m = { x: (poly[i].x + poly[(i + 1) % poly.length].x) / 2, y: (poly[i].y + poly[(i + 1) % poly.length].y) / 2 };
+    if (pointInPoly(m, poly) && !onBoundary(m, poly)) return m;
+  }
+  return null;
+}
+
+/**
+ * Do two polygons share interior area? True when any edge of one properly
+ * crosses the other, or when one encloses the other.
+ *
+ * Merely touching along a wall is *not* an overlap: rooms on either side of a
+ * partition share an edge and no floor, which is the normal way a plan is
+ * drawn.
  */
 export function polysOverlap(a: Vec2[], b: Vec2[]): boolean {
   for (let i = 0, j = a.length - 1; i < a.length; j = i++) {
@@ -128,8 +161,12 @@ export function polysOverlap(a: Vec2[], b: Vec2[]): boolean {
       if (segsCross(a[j], a[i], b[l], b[k])) return true;
     }
   }
-  // No crossings: either disjoint, or one contains the other.
-  if (pointInPoly(a[0], b) || pointInPoly(b[0], a)) return true;
+  // No crossings: either disjoint, touching, or one contains the other. Only
+  // real containment counts, so probe from a strictly interior point.
+  const pa = interiorPoint(a);
+  if (pa && pointInPoly(pa, b) && !onBoundary(pa, b)) return true;
+  const pb = interiorPoint(b);
+  if (pb && pointInPoly(pb, a) && !onBoundary(pb, a)) return true;
   return false;
 }
 
