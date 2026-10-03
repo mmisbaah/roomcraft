@@ -1,0 +1,34 @@
+Let a wall keep going straight at a room corner, and follow the chain
+
+Reported as: starting a wall at the bottom-left corner of a room and aiming
+straight down produced a wall at the wrong angle.
+
+Two causes, both from the rule added earlier that squares up a wall running
+within 10° of the wall it joins.
+
+That rule is right for a partition — a wall leaving part-way along another wall
+and doubling back over it can never enclose a space — but wrong at a room
+corner. Tracing a room means walking its walls, going straight along one and
+turning at the corner, and a wall that carries straight on is exactly what is
+being asked for. Squaring it up sent the wall off at 90° instead. The snap now
+only applies away from a corner, and corners are detected from the room outline
+and the chain's own first point.
+
+The second cause was worse and applied everywhere. The 45° lattice was measured
+against the wall the chain *started* from, so the first turn of 90° in any chain
+looked parallel to that starting wall and was squared up too — tracing a room
+outline reversed instead of turning. Measured live: aiming down then right from
+the top-left corner produced segments of 90° then 90°, i.e. straight on and
+then back down the same line, instead of 90° then 0°.
+
+The lattice now follows the chain's previous segment. That is what "snap to 45°"
+should have meant, and it keeps every segment parallel or square to the original
+wall while letting each turn be a normal turn. Both directions now behave:
+down stays down (90°), right stays right (0°), left stays left (180°), 45°
+stays 45°.
+
+Rectangles drawn from scratch still close at 90° at all four corners, a
+free-standing loop still becomes a room, and a partition starting part-way along
+a wall is still squared up — that case is covered by tests too.
+
+test-wallsnap.ts grows to 68 checks.

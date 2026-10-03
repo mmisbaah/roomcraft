@@ -184,6 +184,44 @@ export function startWallPoint(
 export const CLOSE_RADIUS = 0.45;
 
 /**
+ * True when `anchor` is a **corner** of an existing room outline, or the
+ * chain's own corner when closing a loop.
+ *
+ * This is the one place where a wall running parallel to `dir` is legitimate.
+ * Tracing a room means going along one wall and then turning at its corner, so
+ * at a corner the new wall may simply carry on in the same direction — two room
+ * walls meet there, and squaring that up makes it impossible to trace a room
+ * wall by wall. Everywhere else (part-way along a wall, or the free end of a
+ * partition) a parallel run doubles back over the wall it started from and can
+ * never enclose a space, so it is squared up instead.
+ */
+function isCorner(
+  anchor: Vec2,
+  dir: number,
+  polys: Vec2[][],
+  walls: BuiltWall[],
+  chain: Vec2[],
+): boolean {
+  const near = (p: Vec2) => Math.hypot(anchor.x - p.x, anchor.y - p.y) < 1e-6;
+  const along = (a: Vec2, b: Vec2) =>
+    Math.abs(lineAngleDiff(Math.atan2(b.y - a.y, b.x - a.x), dir)) < 0.02;
+
+  for (const poly of polys) {
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i];
+      const b = poly[(i + 1) % poly.length];
+      // Two room edges meeting here means it is a corner.
+      if (!near(a)) continue;
+      const prev = poly[(i - 1 + poly.length) % poly.length];
+      if (along(prev, a) || along(a, b)) return true;
+    }
+  }
+  // The chain's own start point is a corner while closing a free-standing loop.
+  if (chain.length >= 2 && near(chain[0]) && along(chain[0], chain[1])) return true;
+  return false;
+}
+
+/**
  * How a wall click is resolved.
  *
  *  - `align` locks each segment to the joined wall + a 45° step and rounds
@@ -244,20 +282,43 @@ export function snapWallPoint(
     return hit ?? { x: p.x, y: p.y };
   }
 
-  // The wall this segment joins. Normally the chain's source wall, but when the
-  // click is closing a free-standing loop the joint it will make is with the
-  // chain's *first* segment — that is the wall the rectangle has to square up
-  // against, otherwise the loop closes as a sliver.
+  // The angle this segment is measured against.
+  //
+  // Once a chain is under way it follows its own previous segment, not the wall
+  // it happened to start on. Tracing a room outline is the everyday case —
+  // down the left wall, then a right turn along the bottom — and measuring the
+  // turn against the *original* wall makes every 90° turn look parallel to it,
+  // so the turn gets squared up into a reversal. Measuring against the previous
+  // segment is what "snap to 45°" is supposed to mean, and it still keeps every
+  // segment parallel or square to the wall the chain started from.
   const closing =
     ref === null &&
     chain.length >= 2 &&
     Math.hypot(p.x - chain[0].x, p.y - chain[0].y) < CLOSE_RADIUS;
-  let base = ref;
-  if (closing) base = Math.atan2(chain[1].y - chain[0].y, chain[1].x - chain[0].x);
+  let base: number | null;
+  if (chain.length >= 2) {
+    const prev = chain[chain.length - 1];
+    const before = chain[chain.length - 2];
+    base = Math.atan2(prev.y - before.y, prev.x - before.x);
+  } else if (closing) {
+    base = Math.atan2(chain[1].y - chain[0].y, chain[1].x - chain[0].x);
+  } else {
+    base = ref;
+  }
+
+  /**
+   * A near-parallel segment is only squared up away from a corner. Tracing a
+   * room is wall-by-wall around its corners, so at a corner the new wall may
+   * carry straight on; part-way along a wall, or at the free end of a
+   * partition, running parallel doubles back over the wall it started from and
+   * can never enclose a space, so it becomes a right angle instead.
+   */
+  const atCorner = base !== null && isCorner(anchor, base, polys, walls, chain);
+  const mustSquare = base !== null && !atCorner;
 
   const rawAng = Math.atan2(dy, dx);
   let ang: number;
-  if (base !== null && Math.abs(lineAngleDiff(rawAng, base)) < RECT_SNAP) {
+  if (mustSquare && Math.abs(lineAngleDiff(rawAng, base)) < RECT_SNAP) {
     // Square up to the joined wall. Pick the perpendicular on the side the
     // cursor is actually on so the new wall goes where the user is aiming.
     const side = Math.cos(base) * dy - Math.sin(base) * dx;
@@ -265,10 +326,10 @@ export function snapWallPoint(
   } else {
     const b = base ?? 0;
     const k = Math.round((rawAng - b) / (Math.PI / 4));
-    // The 45° lattice is offsets *away from* the joined wall. A 0° offset would
-    // run parallel to the wall it connects to — a degenerate join that can
-    // never enclose a room — so the nearest usable step is 45°.
-    const step = base !== null && k === 0 ? (rawAng - b > 0 ? 1 : -1) : k;
+    // Away from a corner the 45° lattice starts one step off the joined wall,
+    // since a 0° offset would run along it. At a corner, 0° is a legitimate
+    // aim and is taken at face value.
+    const step = mustSquare && k === 0 ? (rawAng - b > 0 ? 1 : -1) : k;
     ang = b + step * (Math.PI / 4);
   }
   const dir = { x: Math.cos(ang), y: Math.sin(ang) };

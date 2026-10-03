@@ -84,6 +84,113 @@ console.log('\nA wall joining a horizontal wall at a shallow angle is squared up
     `got ${segAngleDeg(freeChain[0], flat).toFixed(1)}°`);
 }
 
+console.log('\nA chain follows its own previous segment, not its starting wall:');
+{
+  // Tracing a room outline: down the left wall, then a right turn along the
+  // bottom. Measured against the wall the chain started on (the top wall, 0°),
+  // that 90° turn looks parallel and gets squared into a reversal.
+  const room: Vec2[] = [
+    { x: 0, y: 0 },
+    { x: 4.34, y: 0 },
+    { x: 4.34, y: 4.24 },
+    { x: 0, y: 4.24 },
+  ];
+  const polys = [room];
+  const chain: Vec2[] = [{ x: 0, y: 0 }];
+  const p1 = snapWallPoint({ x: 0, y: 3 }, polys, [], chain, 0, 'align');
+  ok('first segment goes down the wall', Math.abs(segAngleDeg(chain[0], p1) - 90) < 0.5,
+    `got ${segAngleDeg(chain[0], p1).toFixed(1)}°`);
+  chain.push(p1);
+  const p2 = snapWallPoint({ x: 3, y: 3 }, polys, [], chain, 0, 'align');
+  ok('a 90° turn afterwards is allowed', Math.abs(segAngleDeg(p1, p2)) < 0.5,
+    `got ${segAngleDeg(p1, p2).toFixed(1)}°`);
+  ok('the turn lands where it was aimed', Math.abs(p2.x - 3) < 0.2 && Math.abs(p2.y - 3) < 0.2,
+    `(${p2.x.toFixed(2)}, ${p2.y.toFixed(2)})`);
+
+  // A third segment, turning again, must also work.
+  chain.push(p2);
+  const p3 = snapWallPoint({ x: 3, y: 1.5 }, polys, [], chain, 0, 'align');
+  ok('a second 90° turn is allowed', Math.abs(segAngleDeg(p2, p3) - 90) < 0.5,
+    `got ${segAngleDeg(p2, p3).toFixed(1)}°`);
+
+  // Diagonals off the previous segment stay on the 45° lattice.
+  const diagChain: Vec2[] = [{ x: 0, y: 0 }, { x: 2, y: 0 }];
+  const diag = snapWallPoint({ x: 4, y: 2 }, polys, [], diagChain, 0, 'align');
+  ok('a 45° continuation still works', Math.abs(segAngleDeg(diagChain[1], diag) - 45) < 0.5,
+    `got ${segAngleDeg(diagChain[1], diag).toFixed(1)}°`);
+}
+
+console.log('\nAt a room corner, aiming along a wall is taken at face value:');
+{
+  // The reported case: a chain begun at the bottom-left corner of a room, with
+  // the cursor aiming straight down. It must stay straight down, not be squared.
+  const room: Vec2[] = [
+    { x: 0, y: 0 },
+    { x: 4.34, y: 0 },
+    { x: 4.34, y: 4.24 },
+    { x: 0, y: 4.24 },
+  ];
+  const polys = [room];
+  const corner: Vec2 = { x: 0, y: 4.24 };
+  // ref = the direction of the bottom wall the corner sits on.
+  const ref = Math.atan2(0, 4.34);
+
+  const down = snapWallPoint({ x: 0, y: 5.74 }, polys, [], [corner], ref, 'align');
+  ok('aiming straight down stays straight down', Math.abs(segAngleDeg(corner, down) - 90) < 0.5,
+    `got ${segAngleDeg(corner, down).toFixed(1)}°`);
+
+  const right = snapWallPoint({ x: 1.5, y: 4.24 }, polys, [], [corner], ref, 'align');
+  ok('aiming along the wall (right) is allowed', Math.abs(segAngleDeg(corner, right)) < 0.5,
+    `got ${segAngleDeg(corner, right).toFixed(1)}°`);
+
+  const left = snapWallPoint({ x: -1.5, y: 4.24 }, polys, [], [corner], ref, 'align');
+  ok('aiming back along it (left) is allowed', Math.abs(Math.abs(segAngleDeg(corner, left)) - 0) < 0.5,
+    `got ${segAngleDeg(corner, left).toFixed(1)}°`);
+
+  // Straight up is 90° from the joined wall, which is a clean square and has
+  // always been allowed — included here so a future change can't quietly break
+  // the opposite direction either.
+  const up = snapWallPoint({ x: 0, y: 2.74 }, polys, [], [corner], ref, 'align');
+  ok('aiming straight up stays straight up', Math.abs(segAngleDeg(corner, up) - 90) < 0.5,
+    `got ${segAngleDeg(corner, up).toFixed(1)}°`);
+}
+
+console.log('\nPartway along a wall, a parallel segment is still squared up:');
+{
+  // The original intent behind the rule: a partition starting mid-wall and
+  // doubling back over it. This must NOT be allowed to run parallel.
+  const room: Vec2[] = [
+    { x: 0, y: 0 },
+    { x: 6, y: 0 },
+    { x: 6, y: 4 },
+    { x: 0, y: 4 },
+  ];
+  const polys = [room];
+  const mid: Vec2 = { x: 3, y: 0 }; // middle of the top wall
+  const ref = 0; // that wall's direction
+
+  for (const offDeg of [0, 4, -4, 8, -8]) {
+    const r = (offDeg * Math.PI) / 180;
+    const p = snapWallPoint({ x: mid.x + Math.cos(r) * 2, y: mid.y + Math.sin(r) * 2 }, polys, [], [mid], ref, 'align');
+    const a = segAngleDeg(mid, p);
+    ok(`mid-wall, ${offDeg}° off → square`, Math.abs(Math.abs(a) - 90) < 0.5, `got ${a.toFixed(1)}°`);
+  }
+}
+
+console.log('\nA free-standing partition endpoint still squares up:');
+{
+  // Started on a partition that has no perpendicular at that point — there is
+  // no corner there, so a parallel run is the degenerate case the rule is for.
+  const walls: BuiltWall[] = [{ id: 'w1', a: { x: 0, y: 0 }, b: { x: 6, y: 0 }, kind: 'wall' }];
+  const freeEnd: Vec2 = { x: 6, y: 0 };
+  for (const offDeg of [0, 5, -5, 9, -9]) {
+    const r = (offDeg * Math.PI) / 180;
+    const p = snapWallPoint({ x: freeEnd.x + Math.cos(r) * 2, y: freeEnd.y + Math.sin(r) * 2 }, [], walls, [freeEnd], 0, 'align');
+    const a = segAngleDeg(freeEnd, p);
+    ok(`partition end, ${offDeg}° off → square`, Math.abs(Math.abs(a) - 90) < 0.5, `got ${a.toFixed(1)}°`);
+  }
+}
+
 console.log('\nThe squared wall goes to the side the cursor is on:');
 {
   const walls: BuiltWall[] = [{ id: 'w1', a: { x: 0, y: 0 }, b: { x: 6, y: 0 }, kind: 'wall' }];
