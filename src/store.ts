@@ -32,6 +32,7 @@ import {
   refineLayout,
   ROOM_LABEL,
   stepsFromNote,
+  withCeilingLight,
   type EdgeInfo,
 } from './logic/placement';
 import { activateLicense, getLicense, startCheckout } from './lib/checkout';
@@ -887,10 +888,10 @@ export const useStore = create<AppState>((set, get) => ({
       // The description is read alongside the room's purpose, so "small galley
       // for two, opens to the lounge" narrows the objects the way the purpose
       // alone cannot.
-      const steps = [
+      const steps = withCeilingLight([
         ...(PRESETS[room.kind] ?? PRESETS.living),
         ...stepsFromNote(room.note, room.kind),
-      ];
+      ]);
       const edges = edgesOf(room.poly, room.openings, st.walls);
       const inRoom: PlacedItem[] = [];
 

@@ -40,6 +40,7 @@ jobs:
           npm run test:placement
           npm run test:walls
           npm run test:rooms
+          npm run test:presets
 
       - name: Build web app
         run: npm run build

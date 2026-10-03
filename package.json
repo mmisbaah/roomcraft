@@ -1,7 +1,7 @@
 {
   "name": "roomcraft",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.3",
   "type": "module",
   "description": "Draw your floorplan, AI fills it with furniture - 2D and 3D DIY interior design",
   "main": "electron-main.cjs",
@@ -12,6 +12,7 @@
     "test:placement": "esbuild test-canplaceraw.ts --bundle --platform=node --format=cjs --outfile=test-canplacerow.cjs --log-level=error && node test-canplacerow.cjs",
     "test:walls": "esbuild test-wallsnap.ts --bundle --platform=node --format=cjs --outfile=test-wallsnap.cjs --log-level=error && node test-wallsnap.cjs",
     "test:rooms": "esbuild test-roomnote.ts --bundle --platform=node --format=cjs --outfile=test-roomnote.cjs --log-level=error && node test-roomnote.cjs",
+    "test:presets": "esbuild test-presets.ts --bundle --platform=node --format=cjs --outfile=test-presets.cjs --log-level=error && node test-presets.cjs",
     "preview": "vite preview",
     "electron:dev": "concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "electron:build": "vite build && electron-builder",

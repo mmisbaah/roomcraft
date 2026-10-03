@@ -57,12 +57,16 @@ kbd {
 
 /* ---------------------------------------------------------------- topbar */
 .topbar {
-  height: 56px;
-  flex: 0 0 56px;
+  /* Grows to fit its contents: the action group can wrap onto a second row on
+     a narrow window, and a fixed height used to let that row spill outside the
+     bar and over the canvas. */
+  min-height: 56px;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 0 14px;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  padding: 8px 14px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
   z-index: 5;
@@ -136,6 +140,9 @@ kbd {
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+  /* A wrapped row must never straddle the bar's own padding. */
+  row-gap: 6px;
+  max-width: 100%;
 }
 
 .sep {
@@ -1129,5 +1136,13 @@ kbd {
     height: auto;
     flex-wrap: wrap;
     padding: 8px 10px;
+  }
+
+  /* On a narrow window the action group drops below the mode tabs rather than
+     squeezing them; the mode switch is what must stay reachable. */
+  .topbar-actions {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-start;
   }
 }
