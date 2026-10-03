@@ -4,6 +4,7 @@ import { ITEM_INDEX } from '../data/items';
 import { selectArea, useStore } from '../store';
 import { ROOM_LABEL } from '../logic/placement';
 import { MOUNT_LABEL, TYPE_LABEL } from '../types';
+import ItemThumb from './ItemThumb';
 
 export default function DetailPanel() {
   const selected = useStore((s) => s.selected);
@@ -39,7 +40,9 @@ export default function DetailPanel() {
       {item && placed ? (
         <div className="detail-card">
           <div className="detail-title">
-            <span className="swatch lg" style={{ background: item.colors[placed.colorIdx] ?? item.color }} />
+            <span className="swatch lg">
+              <ItemThumb item={{ ...item, color: item.colors[placed.colorIdx] ?? item.color }} />
+            </span>
             <div>
               <h3>{item.name}</h3>
               <span className="muted">

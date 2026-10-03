@@ -372,18 +372,43 @@ kbd {
 }
 
 .swatch {
-  height: 40px;
+  /* The artwork is drawn in a 3:2 box; matching the card keeps it undistorted
+     and edge-to-edge instead of letterboxed with empty margins. */
+  aspect-ratio: 3 / 2;
   border-radius: 7px;
-  display: grid;
-  place-items: center;
-  font-size: 15px;
-  box-shadow: inset 0 -14px 18px -14px rgba(0, 0, 0, 0.45);
+  display: block;
+  overflow: hidden;
+  position: relative;
+  background: #eef1f5;
 }
 
 .swatch.lg {
-  width: 46px;
-  height: 46px;
-  flex: 0 0 46px;
+  width: 52px;
+  height: 52px;
+  aspect-ratio: auto;
+  border-radius: 8px;
+  flex: 0 0 52px;
+}
+
+/* Lock badge sits above the artwork instead of replacing it. */
+.swatch .lock {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
+.item-card.locked .swatch::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.16) 0 8px,
+    rgba(255, 255, 255, 0) 8px 16px
+  );
 }
 
 .item-name {

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { itemsOf } from '../data/items';
 import { useStore } from '../store';
 import { TYPE_LABEL, TYPE_ORDER, tierUnlocked, type FurnType } from '../types';
+import ItemThumb from './ItemThumb';
 
 const TIER_LABEL = { free: 'Free', pro: 'Pro', max: 'Max' } as const;
 
@@ -88,8 +89,9 @@ export default function Library() {
                             : `${item.name} — ${TIER_LABEL[item.tier]} plan`
                         }
                       >
-                        <span className="swatch" style={{ background: item.color }}>
-                          {unlocked ? '' : '🔒'}
+                        <span className="swatch">
+                          <ItemThumb item={item} locked={!unlocked} />
+                          {!unlocked && <span className="lock">🔒</span>}
                         </span>
                         <span className="item-name">{item.name}</span>
                         <span className="item-meta">
