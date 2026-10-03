@@ -82,7 +82,7 @@ app.on('web-contents-created', (_e, contents) => {
 if (process.argv.includes('--selftest')) {
   const fsSync = require('fs');
   const outPath = process.env.RC_SELFTEST_OUT;
-  const write = (msg) => {
+  const report = (msg) => {
     if (outPath) {
       try {
         fsSync.writeFileSync(outPath, msg);
@@ -93,19 +93,86 @@ if (process.argv.includes('--selftest')) {
     console.log(msg);
   };
 
-  app.whenReady().then(() => {
-    const index = resolveIndexHtml();
-    let problem = null;
-    if (!index) problem = 'index.html not found (checked asar root and dist/)';
-    else if (fsSync.statSync(index).size < 100) problem = `index.html is only ${fsSync.statSync(index).size} bytes`;
-    else if (!fsSync.existsSync(path.join(__dirname, 'preload.cjs'))) problem = 'preload.cjs missing from package';
-
-    if (problem) {
-      write(`SELFTEST FAIL: ${problem}`);
+  app.whenReady().then(async () => {
+    const fail = (why) => {
+      report(`SELFTEST FAIL: ${why}`);
       app.exit(1);
-      return;
+    };
+
+    const index = resolveIndexHtml();
+    if (!index) return fail('index.html not found (checked asar root and dist/)');
+    if (fsSync.statSync(index).size < 100) return fail('index.html looks empty');
+    if (!fsSync.existsSync(path.join(__dirname, 'preload.cjs'))) return fail('preload.cjs missing from package');
+
+    // Actually render the page. Checking that index.html merely exists is not
+    // enough: the bundle can fail to load (e.g. absolute /assets URLs, which
+    // resolve to the filesystem root under file://) and leave a blank window
+    // while every file check still passes.
+    const win = new BrowserWindow({
+      show: false,
+      width: 1280,
+      height: 800,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        preload: path.join(__dirname, 'preload.cjs'),
+      },
+    });
+
+    const errors = [];
+    win.webContents.on('did-fail-load', (_e, code, desc, url) => {
+      errors.push(`did-fail-load ${code} ${desc} ${url}`);
+    });
+    win.webContents.on('preload-error', (_e, p, err) => {
+      errors.push(`preload-error ${p}: ${err.message}`);
+    });
+    win.webContents.on('console-message', (_e, level, message) => {
+      // level 3 = error
+      if (level === 3) errors.push(`console: ${message}`);
+    });
+
+    try {
+      await win.loadFile(index);
+    } catch (e) {
+      return fail(`loadFile threw: ${e.message}`);
     }
-    write(`SELFTEST OK: resolved ${index} (${fsSync.statSync(index).size} bytes); preload.cjs present`);
+
+    // Give the React bundle a moment to mount.
+    await new Promise((r) => setTimeout(r, 2500));
+
+    let state;
+    try {
+      state = await win.webContents.executeJavaScript(`(() => {
+        const root = document.getElementById('root');
+        const scripts = [...document.querySelectorAll('script[src]')].map(s => s.src);
+        const links = [...document.querySelectorAll('link[rel=stylesheet]')].map(l => l.href);
+        return {
+          ready: document.readyState,
+          rootChildren: root ? root.children.length : -1,
+          rootHtmlLen: root ? root.innerHTML.length : -1,
+          bodyText: (document.body ? document.body.innerText : '').trim().slice(0, 120),
+          scripts,
+          links,
+        };
+      })()`);
+    } catch (e) {
+      return fail(`could not inspect the DOM: ${e.message}`);
+    }
+
+    const problems = [];
+    if (state.rootChildren <= 0 || state.rootHtmlLen === 0) {
+      problems.push('#root is empty - the bundle did not mount');
+    }
+    if (errors.length) problems.push(`renderer errors: ${errors.slice(0, 5).join(' | ')}`);
+
+    if (problems.length) return fail(problems.join('; '));
+
+    report(
+      `SELFTEST OK: index=${index}; readyState=${state.ready}; ` +
+        `#root children=${state.rootChildren} htmlLen=${state.rootHtmlLen}; ` +
+        `body="${state.bodyText.replace(/\s+/g, ' ')}"`,
+    );
     app.exit(0);
   });
 } else {
