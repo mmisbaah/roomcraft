@@ -19,6 +19,7 @@ import {
   startWallPoint,
   suggestOpenings,
   wallSegments,
+  type WallSnapMode,
 } from './logic/wallsnap';
 import {
   canPlace,
@@ -29,6 +30,8 @@ import {
   projectToWall,
   PRESETS,
   refineLayout,
+  ROOM_LABEL,
+  stepsFromNote,
   type EdgeInfo,
 } from './logic/placement';
 import { activateLicense, getLicense, startCheckout } from './lib/checkout';
@@ -115,6 +118,7 @@ const DEMO_ROOMS: Room[] = [
     openings: ['window', 'wall', 'wall', 'door', 'wall', 'wall'],
     kind: 'living',
     name: '',
+    note: '',
   },
   {
     id: 'demo-kitchen',
@@ -127,6 +131,7 @@ const DEMO_ROOMS: Room[] = [
     openings: ['window', 'wall', 'window', 'door'],
     kind: 'kitchen',
     name: '',
+    note: '',
   },
 ];
 
@@ -140,6 +145,8 @@ export interface AppState {
   rooms: Room[];
   /** The room being edited / furnished; new items land here. */
   activeRoomId: string | null;
+  /** Room the description dialog is open for, or null. */
+  pendingRoomId: string | null;
   grid: Grid | null;
   items: PlacedItem[];
   selected: string | null;
@@ -156,6 +163,11 @@ export interface AppState {
    * the wall they were started from.
    */
   wallRef: number | null;
+  /**
+   * Wall-tool snapping. `align` keeps walls square and parallel; `free` lets a
+   * wall sit at any angle, for plans that don't follow the grid.
+   */
+  wallSnap: WallSnapMode;
   upgradeOpen: boolean;
   welcomeOpen: boolean;
   checkingOut: boolean;
@@ -167,12 +179,17 @@ export interface AppState {
   setActiveRoom: (id: string) => void;
   setRoomKind: (k: RoomKind) => void;
   setRoomName: (n: string) => void;
+  /** Record what the room is for — name, purpose and a free-text description. */
+  describeRoom: (id: string, patch: { name: string; kind: RoomKind; note: string }) => void;
+  /** Open / dismiss the "what is this room?" dialog. */
+  askRoom: (id: string | null) => void;
   /** Add a room from a closed outline and make it active. */
   addRoom: (poly: Vec2[], openings?: EdgeKind[]) => boolean;
   /** Delete a room along with everything inside it. */
   removeRoom: (id: string) => void;
   setEdgeEdit: (v: boolean) => void;
   setWallBuild: (v: boolean) => void;
+  setWallSnap: (m: WallSnapMode) => void;
   addWallPoint: (p: Vec2) => void;
   finishWallDraft: () => void;
   removeWall: (id: string) => void;
@@ -216,6 +233,59 @@ function toast(get: () => AppState, set: (s: Partial<AppState>) => void, m: stri
 
 let roomSeq = 0;
 const nextRoomId = () => `r${++roomSeq}-${Date.now().toString(36)}`;
+
+/**
+ * How many of one kind are reasonable in a single room.
+ *
+ * A kitchen has one fridge and one range — the working triangle is one of each.
+ * Without this, a preset step that names a kind draws from the whole unlocked
+ * pool and a kitchen can come out with four fridges and no hob. Past the cap a
+ * step moves on to a different piece of the same category, which is how the
+ * free rows end up as cabinet runs rather than duplicates.
+ */
+const ROOM_QUANTITY: Record<string, number> = {
+  'kitchen:fridge': 1,
+  'kitchen:range': 1,
+  'kitchen:cooktop': 1,
+  'kitchen:sinkbase': 1,
+  'kitchen:dishwasher': 1,
+  'kitchen:hood': 1,
+  'kitchen:microwave': 1,
+  'kitchen:island': 1,
+  'kitchen:peninsula': 1,
+  'kitchen:pantry': 1,
+  'kitchen:freezer': 1,
+  'kitchen:cart': 1,
+  'kitchen:recycle': 1,
+  'kitchen:wallcab': 3,
+  'kitchen:basecab': 4,
+  'kitchen:drawerbank': 2,
+  'dining:dining': 1,
+  'dining:round': 1,
+  'dining:trestle': 1,
+  'dining:oval': 1,
+  'dining:bar': 1,
+  'dining:banquet': 1,
+  'dining:buffet': 1,
+  'dining:china': 1,
+  'dining:console': 1,
+  'dining:winerack': 1,
+  'dining:etagere': 1,
+  'dining:serving': 1,
+  'dining:barcart': 1,
+  'seating:sofa': 1,
+  'seating:dining': 8,
+  'seating:accent': 4,
+};
+
+/**
+ * How many of one piece a single room may hold. Keyed by kind, falling back to
+ * the category so an unlisted kind in a capped category (a new sofa, say) is
+ * still held to the category's limit.
+ */
+function roomCap(type: string, kind: string): number {
+  return ROOM_QUANTITY[`${type}:${kind}`] ?? ROOM_QUANTITY[type] ?? 99;
+}
 
 /** The room being edited. Falls back to the first room so callers stay total. */
 function activeRoom(s: AppState): Room | null {
@@ -324,6 +394,7 @@ export const useStore = create<AppState>((set, get) => ({
   draft: null,
   rooms: [],
   activeRoomId: null,
+  pendingRoomId: null,
   grid: null,
   items: [],
   selected: null,
@@ -332,6 +403,7 @@ export const useStore = create<AppState>((set, get) => ({
   wallBuild: false,
   wallDraft: null,
   wallRef: null,
+  wallSnap: 'align',
   upgradeOpen: false,
   welcomeOpen: true,
   checkingOut: false,
@@ -371,6 +443,25 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   /**
+   * Record what a room is for: its name, its purpose and a free-text note.
+   * Dismisses the prompt. The note is kept on the room so AI Fill can read it
+   * later — a description is allowed to be more specific than the category.
+   */
+  describeRoom: (id, patch) => {
+    const st = get();
+    set({
+      rooms: st.rooms.map((r) =>
+        r.id === id ? { ...r, name: patch.name, kind: patch.kind, note: patch.note } : r,
+      ),
+      pendingRoomId: null,
+      activeRoomId: id,
+    });
+    toast(get, set, `${patch.name.trim() || ROOM_LABEL[patch.kind]} saved — AI Fill will use it.`);
+  },
+
+  askRoom: (id) => set({ pendingRoomId: id }),
+
+  /**
    * Add a room from a closed outline and make it active. Rejects outlines that
    * are too small or that already sit inside an existing room, so drawing a
    * loop can never silently swallow the room you are working on.
@@ -396,11 +487,14 @@ export const useStore = create<AppState>((set, get) => ({
       openings: openings ?? suggestOpenings(clean),
       kind: 'living',
       name: '',
+      note: '',
     };
     const rooms = [...st.rooms, room];
     set({
       rooms,
       activeRoomId: room.id,
+      // Ask what the space is for before anything is placed in it.
+      pendingRoomId: room.id,
       grid: makeGrid(rooms, st.walls),
       mode: 'furnish',
     });
@@ -415,6 +509,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({
       rooms,
       activeRoomId: nextActive,
+      pendingRoomId: st.pendingRoomId === id ? null : st.pendingRoomId,
       // Items in a deleted room have nowhere to live.
       items: st.items.filter((i) => i.roomId !== id),
       grid: rooms.length ? makeGrid(rooms, st.walls) : null,
@@ -430,6 +525,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   // -------------------------------------------------------------- 🧱 walls
+  setWallSnap: (m) => set({ wallSnap: m }),
   setWallBuild: (v) => {
     if (!v && get().wallDraft) get().finishWallDraft();
     set(
@@ -446,14 +542,16 @@ export const useStore = create<AppState>((set, get) => ({
     // Start a new chain — remember which wall it is drawn from, so every
     // segment of the chain stays aligned to that wall.
     if (!pts.length) {
-      const { pt, ref } = startWallPoint(p, roomPolys(st), st.walls);
+      const { pt, ref } = startWallPoint(p, roomPolys(st), st.walls, st.wallSnap);
       set({ wallDraft: [pt], wallRef: ref });
       toast(
         get,
         set,
-        ref !== null
-          ? 'Wall started — every segment aligns to the wall you began from. Esc finishes.'
-          : 'Wall started — click to extend, click the first point to close, Esc to finish.',
+        st.wallSnap === 'free'
+          ? 'Free-drawing walls — corners and exact joins still snap. Esc finishes.'
+          : ref !== null
+            ? 'Wall started — every segment aligns to the wall you began from. Esc finishes.'
+            : 'Wall started — click to extend, click the first point to close, Esc to finish.',
       );
       return;
     }
@@ -469,7 +567,7 @@ export const useStore = create<AppState>((set, get) => ({
       return;
     }
 
-    const q = snapWallPoint(p, roomPolys(st), st.walls, pts, st.wallRef);
+    const q = snapWallPoint(p, roomPolys(st), st.walls, pts, st.wallRef, st.wallSnap);
     const last = pts[pts.length - 1];
     if (dist2(q, last) < 0.2 * 0.2) return; // ignore tiny segments
     // Clicking back on the start point ends the chain (needs >= 2 segments).
@@ -546,11 +644,13 @@ export const useStore = create<AppState>((set, get) => ({
       openings: suggestOpenings(clean),
       kind: 'living',
       name: '',
+      note: '',
     };
     const rooms = [...get().rooms, room];
     set({
       rooms,
       activeRoomId: room.id,
+      pendingRoomId: room.id,
       grid: makeGrid(rooms, remaining),
       mode: 'furnish',
       selected: null,
@@ -784,7 +884,13 @@ export const useStore = create<AppState>((set, get) => ({
     const items: PlacedItem[] = [];
 
     for (const room of st.rooms) {
-      const steps = PRESETS[room.kind] ?? PRESETS.living;
+      // The description is read alongside the room's purpose, so "small galley
+      // for two, opens to the lounge" narrows the objects the way the purpose
+      // alone cannot.
+      const steps = [
+        ...(PRESETS[room.kind] ?? PRESETS.living),
+        ...stepsFromNote(room.note, room.kind),
+      ];
       const edges = edgesOf(room.poly, room.openings, st.walls);
       const inRoom: PlacedItem[] = [];
 
@@ -798,6 +904,10 @@ export const useStore = create<AppState>((set, get) => ({
           if (!pool.length) continue;
           if (step.kind) {
             const exact = pool.filter((i) => i.kind === step.kind);
+            // Only narrow to the exact kind when it's actually available. On a
+            // lower tier it may be locked, and then the step falls back to the
+            // rest of the category — so the quota below has to be applied to
+            // whatever gets picked, not to the kind we asked for.
             if (exact.length) pool = exact;
           }
           // R22 — the coffee table should be 1/2 to 2/3 the length of the sofa.
@@ -811,25 +921,35 @@ export const useStore = create<AppState>((set, get) => ({
               if (fit.length) pool = fit;
             }
           }
-          const pick = pool[Math.floor(Math.random() * pool.length)];
-          // Place against everything already in the room *and* other rooms.
-          const spot = findBestSpot(st.grid, room.poly, items, ITEM_INDEX, pick, edges);
-          if (!spot) {
-            skipped++;
-            continue;
-          }
-          const it: PlacedItem = {
-            uid: nextUid(),
-            itemId: pick.id,
-            roomId: room.id,
-            x: spot.x,
-            y: spot.y,
-            rot: spot.rot,
-            colorIdx: 0,
-          };
-          inRoom.push(it);
-          items.push(it);
-          placed++;
+          // Per-room quota, applied to the kind actually being placed: a kitchen
+          // gets one fridge and one range, not four fridges. Also skips anything
+          // already in the room, so a repeated step can't stack identical pieces.
+          const heldOf = (kind: string) =>
+            inRoom.filter((it) => ITEM_INDEX.get(it.itemId)?.kind === kind).length;
+          const eligible = pool.filter((p) => {
+            if (heldOf(p.kind) >= roomCap(p.type, p.kind)) return false;
+            return !inRoom.some((it) => it.itemId === p.id);
+          });
+          if (!eligible.length) continue;
+          const pick = eligible[Math.floor(Math.random() * eligible.length)];
+        // Place against everything already in the room *and* other rooms.
+        const spot = findBestSpot(st.grid, room.poly, items, ITEM_INDEX, pick, edges);
+        if (!spot) {
+          skipped++;
+          continue;
+        }
+        const it: PlacedItem = {
+          uid: nextUid(),
+          itemId: pick.id,
+          roomId: room.id,
+          x: spot.x,
+          y: spot.y,
+          rot: spot.rot,
+          colorIdx: 0,
+        };
+        inRoom.push(it);
+        items.push(it);
+        placed++;
         }
       }
       // Post-pass: apply the relational design rules (conversation circle,
@@ -919,7 +1039,8 @@ export const useStore = create<AppState>((set, get) => ({
       // v1 saved a single room; lift it into the room list so old projects open.
       let rooms: Room[];
       if (Array.isArray(v2.rooms) && v2.rooms.length) {
-        rooms = v2.rooms;
+        // Rooms saved before descriptions existed have no `note` field.
+        rooms = v2.rooms.map((r) => ({ ...r, note: r.note ?? '' }));
       } else if (Array.isArray(v1.room) && v1.room.length >= 3) {
         rooms = [
           {
@@ -928,6 +1049,7 @@ export const useStore = create<AppState>((set, get) => ({
             openings: v1.openings ?? [],
             kind: v1.roomKind ?? 'living',
             name: '',
+            note: '',
           },
         ];
       } else {

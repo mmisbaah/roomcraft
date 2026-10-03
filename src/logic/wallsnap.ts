@@ -145,6 +145,7 @@ export function startWallPoint(
   p: Vec2,
   polys: Vec2[][],
   walls: BuiltWall[],
+  mode: WallSnapMode = 'align',
 ): { pt: Vec2; ref: number | null } {
   const segs = wallSegments(polys, walls);
   // 1) Room corner / wall endpoint — the strongest connection.
@@ -172,13 +173,28 @@ export function startWallPoint(
       ref: Math.atan2(seg.b.y - seg.a.y, seg.b.x - seg.a.x),
     };
   }
-  // 3) Free ground: plain grid start, no alignment source.
+  // 3) Free ground. In free mode the wall starts exactly under the cursor; in
+  // align mode it lands on the 0.25 m grid.
+  if (mode === 'free') return { pt: { x: p.x, y: p.y }, ref: null };
   const SNAP = 0.25;
   return { pt: { x: Math.round(p.x / SNAP) * SNAP, y: Math.round(p.y / SNAP) * SNAP }, ref: null };
 }
 
 /** Distance at which a click counts as closing the loop onto its start point. */
 export const CLOSE_RADIUS = 0.45;
+
+/**
+ * How a wall click is resolved.
+ *
+ *  - `align` locks each segment to the joined wall + a 45° step and rounds
+ *    lengths to 0.25 m. Tidy, and how most floorplans are drawn.
+ *  - `free` puts the wall exactly under the cursor. Only corners and exact
+ *    T-junctions are still caught, so an angled wall really can be drawn at the
+ *    angle you drew it — the lattice otherwise refuses anything that isn't a
+ *    multiple of 45°, which is the usual reason a plan won't look the way you
+ *    pictured it.
+ */
+export type WallSnapMode = 'align' | 'free';
 
 /**
  * Snap a wall click. Vertices win (corners make the cleanest joints). With a
@@ -195,20 +211,37 @@ export function snapWallPoint(
   walls: BuiltWall[],
   chain: Vec2[],
   ref: number | null,
+  mode: WallSnapMode = 'align',
 ): Vec2 {
   const SNAP = 0.25;
+  // Free mode keeps only the things a hand-drawn floorplan still needs: exact
+  // corners and clean T-junctions. No angle lattice, no length rounding — the
+  // click lands where the click was.
+  const gridSnap = mode === 'align';
   const best = nearestVert(p, wallVerts(polys, walls).concat(chain), 0.3);
   if (best) return { x: best.x, y: best.y };
 
   // Starting fresh: fall back to the start rules (wall projection / grid).
-  if (!chain.length) return startWallPoint(p, polys, walls).pt;
+  if (!chain.length) {
+    const s = startWallPoint(p, polys, walls, mode);
+    return gridSnap || s.ref !== null ? s.pt : { x: p.x, y: p.y };
+  }
 
   const anchor = chain[chain.length - 1];
   const dx = p.x - anchor.x;
   const dy = p.y - anchor.y;
   const len = Math.hypot(dx, dy);
   if (len <= 0.2) {
-    return { x: Math.round(p.x / SNAP) * SNAP, y: Math.round(p.y / SNAP) * SNAP };
+    return gridSnap
+      ? { x: Math.round(p.x / SNAP) * SNAP, y: Math.round(p.y / SNAP) * SNAP }
+      : { x: p.x, y: p.y };
+  }
+
+  // Free mode: the wall goes exactly where the cursor is, but still lands
+  // exactly on a wall it crosses (a clean T-junction rather than a near miss).
+  if (mode === 'free') {
+    const hit = rayWallHit(anchor, { x: dx / len, y: dy / len }, polys, walls, p, 0.25);
+    return hit ?? { x: p.x, y: p.y };
   }
 
   // The wall this segment joins. Normally the chain's source wall, but when the

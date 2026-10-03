@@ -30,6 +30,8 @@ export type FurnType =
   | 'walldecor'
   | 'tabletop'
   | 'functional'
+  | 'kitchen'
+  | 'dining'
   | 'vanity'
   | 'bathtub'
   | 'shower'
@@ -121,6 +123,12 @@ export interface Room {
   kind: RoomKind;
   /** Custom label shown in the UI; falls back to the kind's label when blank. */
   name: string;
+  /**
+   * Free-text description of the room — "small galley, opens to the lounge",
+   * "for a toddler". AI Fill reads it alongside `kind`, so a room can be more
+   * specific than its category alone.
+   */
+  note: string;
 }
 
 /** An item dropped into the room. */
@@ -161,6 +169,8 @@ export const TYPE_LABEL: Record<FurnType, string> = {
   walldecor: 'Wall Décor',
   tabletop: 'Tabletop Accents',
   functional: 'Functional Accents',
+  kitchen: 'Kitchen',
+  dining: 'Dining Room',
   vanity: 'Bathroom Vanities',
   bathtub: 'Bathtubs',
   shower: 'Shower Enclosures',
@@ -187,6 +197,8 @@ export const TYPE_ICON: Record<FurnType, string> = {
   walldecor: '\u{1F5BC}️',
   tabletop: '\u{1F3FA}',
   functional: '\u{1F525}',
+  kitchen: '\u{1F372}',
+  dining: '\u{1F37D}\u{FE0F}',
   vanity: '\u{1FAA5}',
   bathtub: '\u{1F6C1}',
   shower: '\u{1F6BF}',
@@ -213,6 +225,8 @@ export const TYPE_ORDER: FurnType[] = [
   'walldecor',
   'tabletop',
   'functional',
+  'kitchen',
+  'dining',
   'vanity',
   'bathtub',
   'shower',

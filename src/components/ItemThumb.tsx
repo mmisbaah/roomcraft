@@ -5,7 +5,7 @@ import type { FurnItem } from '../types';
  * Vector thumbnails for library items.
  *
  * Every item is drawn from its `kind` and tinted with its own palette, so all
- * 460 pieces have distinct, recognisable artwork without shipping a single
+ * 500 pieces have distinct, recognisable artwork without shipping a single
  * bitmap. Rendering is pure inline SVG, so it costs nothing to download and
  * scales cleanly at any card size.
  *
@@ -1011,6 +1011,311 @@ const ARCH: Record<string, Shape> = {
   cove_arch: Panel,
 };
 
+// --- kitchen ---------------------------------------------------------------
+
+/** A worktop: a slab on a plinth, with doors or drawers in the front. */
+function Counter({ p, w, d }: ShapeProps) {
+  const wide = Math.min(96, 34 + w * 30);
+  const x = (120 - wide) / 2;
+  const deep = Math.min(34, 16 + d * 22);
+  const y = 68 - deep - 4;
+  return (
+    <>
+      <Shadow rx={wide / 2 + 2} />
+      <rect x={x + 3} y={62} width={wide - 6} height={7} rx={1} fill={p.accent} opacity={0.5} />
+      <rect x={x} y={y} width={wide} height={deep} rx={2} fill={p.main} stroke={stroke(p)} />
+      {/* worktop overhangs the carcass */}
+      <rect x={x - 2} y={y - 4} width={wide + 4} height={5} rx={2} fill="#e6e9ee" />
+      {(() => {
+          const n = Math.max(1, Math.round(wide / 26));
+          const dw = (wide - 8) / n - 4;
+          return Array.from({ length: n }, (_, i) => (
+            <rect
+              key={i}
+              x={x + 4 + i * (dw + 4)}
+              y={y + 4}
+              width={dw}
+              height={deep - 8}
+              rx={2}
+              fill={p.light}
+              opacity={0.55}
+            />
+          ));
+        })()}
+    </>
+  );
+}
+
+/** Base cabinet run with a sink and tap — the kitchen's most recognisable piece. */
+function SinkUnit({ p, w, d }: ShapeProps) {
+  const wide = Math.min(96, 34 + w * 30);
+  const x = (120 - wide) / 2;
+  const deep = Math.min(34, 16 + d * 22);
+  const y = 68 - deep - 4;
+  return (
+    <>
+      <Shadow rx={wide / 2 + 2} />
+      <rect x={x} y={y} width={wide} height={deep} rx={2} fill={p.main} stroke={stroke(p)} />
+      <rect x={x - 2} y={y - 4} width={wide + 4} height={5} rx={2} fill="#e6e9ee" />
+      <rect x={60 - wide * 0.2} y={y - 2} width={wide * 0.4} height={deep * 0.55} rx={2} fill="#c3cbd4" />
+      <rect x={60 - wide * 0.17} y={y - 1} width={wide * 0.34} height={deep * 0.42} rx={2} fill="#9aa4b2" />
+      <rect x={58} y={y - 18} width={4} height={16} rx={2} fill="#8a8f99" />
+      <rect x={58} y={y - 20} width={14} height={3.5} rx={1.75} fill="#8a8f99" />
+    </>
+  );
+}
+
+function Appliance({ p, w, d }: ShapeProps) {
+  const wide = Math.min(52, 24 + w * 22);
+  const x = (120 - wide) / 2;
+  return (
+    <>
+      <Shadow rx={wide / 2 + 2} />
+      <rect x={x} y={12} width={wide} height={56} rx={3} fill={p.main} stroke={stroke(p)} />
+      {/* door split + long vertical handles either side of it */}
+      <rect x={x + 2} y={14} width={wide / 2 - 3} height={40} rx={2} fill={p.light} opacity={0.5} />
+      <rect x={x + wide / 2 + 1} y={14} width={wide / 2 - 3} height={40} rx={2} fill={p.light} opacity={0.5} />
+      <rect x={60 - 4} y={20} width={3} height={26} rx={1.5} fill="#9aa4b2" />
+      <rect x={60 + 1} y={20} width={3} height={26} rx={1.5} fill="#9aa4b2" />
+      <rect x={x + 3} y={55} width={wide - 6} height={10} rx={2} fill={p.accent} opacity={0.6} />
+    </>
+  );
+}
+
+function Range({ p, w, d }: ShapeProps) {
+  const wide = Math.min(56, 30 + w * 26);
+  const x = (120 - wide) / 2;
+  return (
+    <>
+      <Shadow rx={wide / 2 + 2} />
+      <rect x={x} y={28} width={wide} height={40} rx={3} fill={p.main} stroke={stroke(p)} />
+      {/* oven door with dark glass */}
+      <rect x={x + 4} y={38} width={wide - 8} height={22} rx={2} fill="#2b3138" />
+      <rect x={x + 4} y={33} width={wide - 8} height={3} rx={1.5} fill="#9aa4b2" />
+      {/* hob with burner rings */}
+      <rect x={x - 2} y={22} width={wide + 4} height={7} rx={2} fill="#22262c" />
+      {[0, 1, 2, 3].map((i) => (
+        <circle
+          key={i}
+          cx={x + 8 + (i % 2) * (wide - 16)}
+          cy={25.5}
+          r={3.4}
+          fill="none"
+          stroke="#8a8f99"
+          strokeWidth={1.2}
+        />
+      ))}
+      {[0, 1, 2, 3].map((i) => (
+        <circle key={i} cx={x + 7 + (i % 2) * (wide - 14)} cy={65} r={1.8} fill="#9aa4b2" />
+      ))}
+    </>
+  );
+}
+
+function Hood({ p, w, d }: ShapeProps) {
+  const wide = Math.min(56, 28 + w * 26);
+  const x = (120 - wide) / 2;
+  return (
+    <>
+      <rect x={20} y={8} width={80} height={64} rx={3} fill="rgba(148,163,184,0.18)" />
+      <rect x={60 - 4} y={10} width={8} height={16} rx={1} fill={p.accent} opacity={0.6} />
+      <path d={`M${x} 42 L${60 - 8} 26 L${60 + 8} 26 L${x + wide} 42 Z`} fill={p.main} stroke={stroke(p)} />
+      <rect x={x + 2} y={42} width={wide - 4} height={4} rx={1.5} fill="#8a8f99" />
+      <rect x={x + 6} y={30} width={wide - 12} height={2.5} rx={1.25} fill="#fff3c4" />
+    </>
+  );
+}
+
+function Cart({ p, w, d }: ShapeProps) {
+  const wide = Math.min(60, 30 + w * 30);
+  const x = (120 - wide) / 2;
+  const deep = Math.min(30, 14 + d * 26);
+  return (
+    <>
+      <Shadow rx={wide / 2 + 2} />
+      {[0, 1].map((i) => (
+        <rect key={i} x={x} y={30 + i * 22} width={wide} height={4} rx={1.5} fill={i ? p.light : p.main} stroke={stroke(p)} />
+      ))}
+      <rect x={x + 2} y={34} width={wide - 4} height={18} rx={2} fill={p.main} stroke={stroke(p)} />
+      {[0, 1, 2, 3].map((i) => (
+        <rect
+          key={i}
+          x={x + 5 + (i % 2) * (wide - 16)}
+          y={50}
+          width={3}
+          height={14}
+          rx={1.5}
+          fill="#8a8f99"
+        />
+      ))}
+      {[0, 1].map((i) => (
+        <circle key={i} cx={x + 6.5 + i * (wide - 13)} cy={66} r={3.4} fill="#3d405b" />
+      ))}
+    </>
+  );
+}
+
+// --- dining ----------------------------------------------------------------
+
+function DiningTable({ p, w, d }: ShapeProps) {
+  const wide = Math.min(94, 44 + w * 22);
+  const deep = Math.min(36, 18 + d * 18);
+  const x = (120 - wide) / 2;
+  const y = 42;
+  return (
+    <>
+      <Shadow rx={wide / 2 + 2} />
+      <rect x={x} y={y} width={wide} height={deep} rx={4} fill={p.main} stroke={stroke(p)} />
+      <rect x={x + 3} y={y + 3} width={wide - 6} height={deep * 0.3} rx={2} fill={p.light} opacity={0.6} />
+      {/* chairs pulled up around it */}
+      {[0, 1].map((i) => (
+        <g key={i}>
+          <rect x={x + 8 + i * (wide - 20)} y={y - 9} width={11} height={9} rx={2.5} fill={p.accent} opacity={0.8} />
+          <rect x={x + 8 + i * (wide - 20)} y={y + deep} width={11} height={9} rx={2.5} fill={p.accent} opacity={0.8} />
+        </g>
+      ))}
+    </>
+  );
+}
+
+function RoundDining({ p, w }: ShapeProps) {
+  const r = Math.min(34, 18 + w * 14);
+  return (
+    <>
+      <Shadow rx={r + 2} />
+      <rect x={57} y={48} width={6} height={18} rx={2} fill={p.accent} />
+      <path d={`M${60 - r * 0.7} 70 h${r * 1.4}`} stroke={p.accent} strokeWidth={5} strokeLinecap="round" />
+      <ellipse cx={60} cy={44} rx={r} ry={r * 0.36} fill={p.main} stroke={stroke(p)} />
+      <ellipse cx={60} cy={41} rx={r} ry={r * 0.32} fill={p.light} />
+    </>
+  );
+}
+
+function Sideboard({ p, w, d }: ShapeProps) {
+  const wide = Math.min(90, 36 + w * 28);
+  const x = (120 - wide) / 2;
+  const deep = Math.min(28, 14 + d * 20);
+  const y = 66 - deep - 6;
+  return (
+    <>
+      <Shadow rx={wide / 2 + 2} />
+      <rect x={x + 4} y={64} width={wide - 8} height={5} rx={1} fill={p.accent} opacity={0.5} />
+      <rect x={x} y={y} width={wide} height={deep} rx={3} fill={p.main} stroke={stroke(p)} />
+      <rect x={x - 2} y={y - 4} width={wide + 4} height={4} rx={1.5} fill="#e6e9ee" />
+      {[0, 1, 2].map((i) => (
+        <g key={i}>
+          <rect
+            x={x + 5 + i * ((wide - 10) / 3)}
+            y={y + 4}
+            width={(wide - 10) / 3 - 4}
+            height={deep - 8}
+            rx={2}
+            fill={p.light}
+            opacity={0.55}
+          />
+          <circle cx={x + 5 + i * ((wide - 10) / 3) + ((wide - 10) / 3 - 4) / 2} cy={y + deep / 2} r={1.6} fill={p.dark} />
+        </g>
+      ))}
+    </>
+  );
+}
+
+function ChinaCabinet({ p, w, d }: ShapeProps) {
+  const wide = Math.min(54, 28 + w * 26);
+  const x = (120 - wide) / 2;
+  const deep = Math.min(26, 12 + d * 18);
+  const y = 66 - deep - 10;
+  return (
+    <>
+      <Shadow rx={wide / 2 + 2} />
+      <rect x={x} y={y} width={wide} height={deep} rx={3} fill={p.main} stroke={stroke(p)} />
+      <rect x={x + 2} y={y - 24} width={wide - 4} height={22} rx={2} fill="#cfe8f0" stroke={stroke(p)} />
+      {[0, 1].map((i) => (
+        <rect key={i} x={x + 5} y={y - 18 + i * 8} width={wide - 10} height={2} rx={1} fill={p.accent} opacity={0.6} />
+      ))}
+      <circle cx={60} cy={y - 13} r={3.4} fill="#e8e3d9" />
+      <rect x={x + 2} y={y + 4} width={wide - 4} height={deep - 8} rx={2} fill={p.light} opacity={0.5} />
+    </>
+  );
+}
+
+function WineRack({ p, w, d }: ShapeProps) {
+  const wide = Math.min(50, 26 + w * 30);
+  const x = (120 - wide) / 2;
+  const deep = Math.min(28, 14 + d * 24);
+  const y = 66 - deep;
+  return (
+    <>
+      <Shadow rx={wide / 2 + 2} />
+      <rect x={x} y={y} width={wide} height={deep} rx={2} fill={p.dark} />
+      {[0, 1, 2].map((r) =>
+        [0, 1, 2].map((b) => (
+          <circle
+            key={`${r}${b}`}
+            cx={x + 8 + b * ((wide - 16) / 2)}
+            cy={y + 6 + r * ((deep - 10) / 2)}
+            r={2.8}
+            fill={['#2f4f3a', '#3a2b4a', '#4a2b2b'][(r + b) % 3]}
+          />
+        )),
+      )}
+      <rect x={x} y={y} width={wide} height={deep} rx={2} fill="none" stroke={p.main} strokeWidth={2.5} />
+    </>
+  );
+}
+
+function Bench2({ p, w, d }: ShapeProps) {
+  const wide = Math.min(88, 40 + w * 30);
+  const x = (120 - wide) / 2;
+  return (
+    <>
+      <Shadow rx={wide / 2 + 2} />
+      <rect x={x} y={42} width={wide} height={9} rx={3} fill={p.main} stroke={stroke(p)} />
+      <rect x={x + 2} y={51} width={wide - 4} height={5} rx={2} fill={p.light} />
+      {[0, 1].map((i) => (
+        <rect key={i} x={x + 9 + i * (wide - 18)} y={56} width={5} height={13} rx={2} fill={p.accent} />
+      ))}
+    </>
+  );
+}
+
+const KITCHEN_SHAPES: Record<string, Shape> = {
+  basecab: Counter,
+  drawerbank: Counter,
+  island: Counter,
+  peninsula: Counter,
+  cart: Cart,
+  sinkbase: SinkUnit,
+  fridge: Appliance,
+  freezer: Appliance,
+  range: Range,
+  cooktop: Range,
+  hood: Hood,
+  dishwasher: Appliance,
+  microwave: Appliance,
+  wallcab: Counter,
+  pantry: Counter,
+  recycle: Counter,
+};
+
+const DINING_SHAPES: Record<string, Shape> = {
+  dining: DiningTable,
+  trestle: DiningTable,
+  bar: DiningTable,
+  oval: DiningTable,
+  banquet: DiningTable,
+  round: RoundDining,
+  buffet: Sideboard,
+  console: Sideboard,
+  serving: Cart,
+  barcart: Cart,
+  china: ChinaCabinet,
+  winerack: WineRack,
+  platerack: Counter,
+  etagere: Counter,
+  bench: Bench2,
+};
+
 /**
  * Resolve the artwork for an item.
  *
@@ -1023,6 +1328,8 @@ function resolveShape(item: FurnItem): Shape {
   const k = item.kind;
 
   const byType: Partial<Record<FurnItem['type'], Record<string, Shape>>> = {
+    kitchen: KITCHEN_SHAPES,
+    dining: DINING_SHAPES,
     seating: {
       ...SEATING_WIDE,
       ...SEATING_ONE,
@@ -1070,6 +1377,8 @@ function resolveShape(item: FurnItem): Shape {
 
   // Unmapped kind inside a known category: fall back to the category default.
   const fallback: Partial<Record<FurnItem['type'], Shape>> = {
+    kitchen: Counter,
+    dining: DiningTable,
     seating: Chair,
     tables: Table,
     beds: Bed,

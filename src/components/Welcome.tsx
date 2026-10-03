@@ -26,7 +26,10 @@ export default function Welcome() {
           </li>
           <li>
             <b>2. Let AI fill it</b>
-            <span>One click places the best-fit furniture for a living room, bedroom or office.</span>
+            <span>
+              Tell it what each room is for — 18 types, from kitchen to nursery — and one click
+              places the best-fit furniture.
+            </span>
           </li>
           <li>
             <b>3. Swap &amp; style</b>
@@ -48,7 +51,7 @@ export default function Welcome() {
         </div>
         <p className="muted tiny center">
           3 items per category are free (51) · Pro adds 5 more per category (136) · Max unlocks
-          all 20 (460 pieces across 23 categories).
+          all 20 (500 pieces across 25 categories).
         </p>
       </div>
     </div>

@@ -158,6 +158,7 @@ export default function Canvas2D() {
   const walls = useStore((s) => s.walls);
   const wallBuild = useStore((s) => s.wallBuild);
   const wallDraft = useStore((s) => s.wallDraft);
+  const wallSnap = useStore((s) => s.wallSnap);
 
   // ---------------------------------------------------------------- drawing
   const draw = useCallback(() => {
@@ -606,7 +607,7 @@ export default function Canvas2D() {
       // aligned-axis snap), so alignment with the starting wall is visible
       // before committing.
       const target = cursor
-        ? snapWallPoint(cursor, st.rooms.map((r) => r.poly), st.walls, chain, st.wallRef)
+        ? snapWallPoint(cursor, st.rooms.map((r) => r.poly), st.walls, chain, st.wallRef, st.wallSnap)
         : null;
       ctx.strokeStyle = '#4f6df5';
       ctx.lineWidth = 5;
@@ -732,7 +733,7 @@ export default function Canvas2D() {
   // redraw on state changes / resize
   useEffect(() => {
     draw();
-  }, [draw, rooms, activeRoomId, draft, items, selected, grid, mode, edgeEdit, walls, wallBuild, wallDraft]);
+  }, [draw, rooms, activeRoomId, draft, items, selected, grid, mode, edgeEdit, walls, wallBuild, wallDraft, wallSnap]);
 
   // reset view when a new room appears
   useEffect(() => {
@@ -839,6 +840,17 @@ export default function Canvas2D() {
     if (m) m.style.display = 'none';
   };
 
+  /**
+   * Clicks that reach the canvas are swallowed while the room prompt or the
+   * welcome dialog is open. They are overlays, so a stray click on the visible
+   * canvas behind them would otherwise start a wall chain or move furniture
+   * before the room has even been described.
+   */
+  const overlayOpen = () =>
+    useStore.getState().pendingRoomId !== null ||
+    useStore.getState().welcomeOpen ||
+    useStore.getState().upgradeOpen;
+
   // ---------------------------------------------------------- touch helpers
   const clearLongPress = () => {
     const lp = longPressRef.current;
@@ -926,6 +938,7 @@ export default function Canvas2D() {
 
   const onContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
+    if (overlayOpen()) return;
     const st = useStore.getState();
     if (st.wallBuild) {
       // right-click ends the wall chain (or exits the tool)
@@ -951,6 +964,7 @@ export default function Canvas2D() {
   const onPointerDown = (e: React.PointerEvent) => {
     const st = useStore.getState();
     if (e.button !== 0) return; // right-click is context menu only
+    if (overlayOpen()) return;
     hideCtxMenu();
     try {
       (e.target as Element).setPointerCapture?.(e.pointerId);

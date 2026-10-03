@@ -49,6 +49,11 @@ export const PREFS: Record<FurnType, PlacePrefs> = {
   walldecor: { wall: 1.0, center: 0.3, door: -1.6 },
   tabletop: { wall: 0.2, center: 0.8, door: -0.4 },
   functional: { wall: 0.9, center: 0.4, door: -1.2 },
+  // Kitchens are planned as a working triangle, so the run of cabinets hugs
+  // the wall hard and nothing is placed in the middle of the floor.
+  kitchen: { wall: 1.35, center: 0.0, door: -1.5 },
+  // Dining needs circulation all round the table, so it sits more centrally.
+  dining: { wall: 0.85, center: 0.7, door: -1.2 },
   vanity: { wall: 1.0, center: 0.1, door: -1.0 },
   bathtub: { wall: 0.9, center: 0.3, door: -0.7 },
   shower: { wall: 0.8, center: 0.3, door: -0.7 },
@@ -113,6 +118,9 @@ export function rotRectInsidePoly(poly: Vec2[], x: number, y: number, w: number,
 /** Top surface height of a floor item, or null when it can't support anything. */
 export function supportTop(f: FurnItem): number | null {
   if (f.mount !== 'floor') return null;
+  // Counters, islands and peninsulas are worktops — a fruit bowl or a lamp has
+  // to be able to stand on them, the same way it does on a table.
+  if (f.type === 'kitchen' || f.type === 'dining') return f.h || 0.9;
   if (f.type === 'tables') return f.h || f.spec.h || 0.75;
   if (f.type === 'vanity') return f.h; // countertop — soaps & succulents sit here
   if (f.type === 'storage') {
@@ -1390,7 +1398,11 @@ function centerPendantOverTable(poly: Vec2[], items: PlacedItem[], byId: Map<str
   if (!pendant) return;
   const table = items.find((it) => {
     const f = byId.get(it.itemId);
-    return f && f.type === 'tables' && (f.kind === 'coffee' || f.kind === 'dining');
+    if (!f) return false;
+    // Dining tables now live in their own category; the coffee-table rule still
+    // covers the living room.
+    if (f.type === 'dining' && ['dining', 'round', 'trestle', 'bar', 'oval', 'banquet'].includes(f.kind)) return true;
+    return f.type === 'tables' && (f.kind === 'coffee' || f.kind === 'dining');
   });
   if (!table) return;
   const pf = byId.get(pendant.itemId);
@@ -1629,22 +1641,34 @@ export const PRESETS: Record<RoomKind, PresetStep[]> = {
     { type: 'succulents' }, // on the vanity counter (surface mount)
   ],
   dining: [
-    { type: 'tables', kind: 'dining' }, // anchors the room; chairs ring it
+    // The table first: it anchors the room and the chairs are placed around it.
+    { type: 'dining', kind: 'dining' },
     { type: 'seating', kind: 'dining', count: 4 },
-    { type: 'ceilight', kind: 'pendant', count: 2 }, // low over the table
-    { type: 'tabletop', kind: 'vase' },
+    { type: 'ceilight', kind: 'pendant' }, // centred over the table
+    { type: 'dining', kind: 'buffet' }, // storage against a wall
+    { type: 'textiles', kind: 'runner' },
     { type: 'tabletop', kind: 'candle' },
-    { type: 'walldecor', kind: 'artwork' },
+    { type: 'tabletop', kind: 'bowl' },
+    { type: 'walldecor', kind: 'mirror' },
     { type: 'floorplants', kind: 'ficus' },
   ],
   kitchen: [
-    { type: 'tables', kind: 'table' },
-    { type: 'seating', kind: 'dining', count: 2 },
-    { type: 'storage', kind: 'sideboard' },
-    { type: 'functional', kind: 'media' }, // the appliance run
-    { type: 'ceilight', kind: 'flush' },
-    { type: 'tabletop', kind: 'bowl' },
-    { type: 'tabletop', kind: 'vase' },
+    // The working triangle first — fridge, sink and hob — then the surfaces
+    // that carry the rest of the room. Quantities are capped per room by
+    // ROOM_QUANTITY, so a kitchen ends up with one of each appliance.
+    { type: 'kitchen', kind: 'fridge' },
+    { type: 'kitchen', kind: 'sinkbase' },
+    { type: 'kitchen', kind: 'range' },
+    { type: 'kitchen', kind: 'dishwasher' },
+    { type: 'kitchen', kind: 'island' }, // the main prep surface
+    { type: 'kitchen', kind: 'basecab', count: 4 },
+    { type: 'kitchen', kind: 'wallcab', count: 3 }, // hangs above the worktop
+    { type: 'kitchen', kind: 'hood' }, // over the hob
+    { type: 'ceilight', kind: 'recessed', count: 2 },
+    { type: 'tabletop', kind: 'bowl' }, // fruit bowl on the island
+    { type: 'tabletop', kind: 'board' },
+    { type: 'functional', kind: 'basket' }, // by the sink
+    { type: 'floorplants', kind: 'fern' }, // something that likes the humidity
   ],
   kids: [
     { type: 'beds' },
@@ -1796,4 +1820,84 @@ export const ROOM_KIND_ORDER: RoomKind[] = [
 /** Display name for a room: its custom label if set, else the kind's label. */
 export function roomTitle(r: { kind: RoomKind; name: string }): string {
   return r.name.trim() || ROOM_LABEL[r.kind];
+}
+
+/**
+ * Words in a room description that mean "use this category of object", with the
+ * maximum number of each that may be added. A description is free text written
+ * by hand, so this is deliberately a short list of unambiguous terms rather
+ * than anything clever: "desk" means a desk, "plant" means greenery. Anything
+ * unrecognised is ignored, which leaves the room's purpose in charge.
+ */
+const NOTE_TERMS: { re: RegExp; steps: PresetStep[] }[] = [
+  { re: /\b(sofa|couch|settee)\b/, steps: [{ type: 'seating', kind: 'sofa' }] },
+  { re: /\b(armchair|accent chair|lounge chair)\b/, steps: [{ type: 'seating', kind: 'accent' }] },
+  { re: /\b(dining chair|chair)s?\b/, steps: [{ type: 'seating', kind: 'dining', count: 2 }] },
+  { re: /\b(bed|bedside|double bed|single bed)\b/, steps: [{ type: 'beds' }] },
+  { re: /\b(nightstand|bedside table)\b/, steps: [{ type: 'storage', kind: 'nightstand' }] },
+  { re: /\b(desk|workspace|study)\b/, steps: [{ type: 'tables', kind: 'desk' }] },
+  { re: /\b(bookcase|books|shelving|shelves)\b/, steps: [{ type: 'storage', kind: 'bookcase' }] },
+  { re: /\b(tv|television|screen)\b/, steps: [{ type: 'functional', kind: 'media' }] },
+  { re: /\b(fireplace)\b/, steps: [{ type: 'functional', kind: 'fireplace' }] },
+  { re: /\b(rug|carpet)\b/, steps: [{ type: 'textiles', kind: 'arearug' }] },
+  { re: /\b(plant|greenery|fern)\b/, steps: [{ type: 'floorplants' }] },
+  { re: /\b(lamp|lighting|lantern)\b/, steps: [{ type: 'floorlamp' }] },
+  { re: /\b(pendant|chandelier)\b/, steps: [{ type: 'ceilight', kind: 'pendant' }] },
+  { re: /\b(sconce)\b/, steps: [{ type: 'walllight' }] },
+  { re: /\b(art|artwork|painting|print)\b/, steps: [{ type: 'walldecor', kind: 'artwork' }] },
+  { re: /\b(mirror)\b/, steps: [{ type: 'walldecor', kind: 'mirror' }] },
+  { re: /\b(curtain|curtains|drape|blind)\b/, steps: [{ type: 'walldecor', kind: 'curtain' }] },
+  { re: /\b(wardrobe|dresser|sideboard|credenza)\b/, steps: [{ type: 'storage', kind: 'sideboard' }] },
+  { re: /\b(fridge|refrigerator|freezer)\b/, steps: [{ type: 'kitchen', kind: 'fridge' }] },
+  { re: /\b(island|peninsula|breakfast bar)\b/, steps: [{ type: 'kitchen', kind: 'island' }] },
+  { re: /\b(sink|basin)\b/, steps: [{ type: 'kitchen', kind: 'sinkbase' }] },
+  { re: /\b(cooktop|hob|stove|oven|range)\b/, steps: [{ type: 'kitchen', kind: 'range' }] },
+  { re: /\b(dining table|table for)\b/, steps: [{ type: 'dining', kind: 'dining' }] },
+  { re: /\b(bath|tub|bathtub)\b/, steps: [{ type: 'bathtub' }] },
+  { re: /\b(shower)\b/, steps: [{ type: 'shower' }] },
+  { re: /\b(toilet|wc)\b/, steps: [{ type: 'toilet' }] },
+  { re: /\b(vanity)\b/, steps: [{ type: 'vanity' }] },
+  { re: /\b(towel)\b/, steps: [{ type: 'towelrack' }] },
+  { re: /\b(hamper|laundry|basket)\b/, steps: [{ type: 'functional', kind: 'basket' }] },
+];
+
+/**
+ * Turn a free-text room description into extra placement steps.
+ *
+ * The room's purpose decides the baseline layout; the description adds to it,
+ * so the terms that merely restate the purpose ("kitchen" in a kitchen) are
+ * skipped — otherwise a kitchen that mentions "dining table" would gain one
+ * regardless of the preset's judgement. Explicit requests, including the ones
+ * that contradict the purpose, are always honoured: a kitchen described as
+ * "no dining table" should not get one, and a bedroom that says "desk" should.
+ */
+export function stepsFromNote(note: string, kind?: RoomKind): PresetStep[] {
+  const raw = (note ?? '').toLowerCase();
+  if (!raw.trim()) return [];
+  // "no dining table" must not place a dining table. Negations are stripped
+  // before matching, so anything named in a negative phrase is ignored.
+  // Everything from a negation up to the next clause is dropped, so
+  // "without a sofa but needs a desk" removes the sofa and keeps the desk.
+  const text = raw.replace(
+    /\b(?:no|without|avoid|not|don'?t|doesn'?t|skip(?:ping)?|leave\s+out)\b[^,;.]*/g,
+    ' ',
+  );
+
+  // What the purpose already asks for, so restating it changes nothing.
+  const baseline = new Set(
+    (kind ? PRESETS[kind] ?? [] : []).map((s) => `${s.type}:${s.kind ?? ''}`),
+  );
+
+  const out: PresetStep[] = [];
+  const seen = new Set<string>();
+  for (const { re, steps } of NOTE_TERMS) {
+    if (!re.test(text)) continue;
+    for (const s of steps) {
+      const key = `${s.type}:${s.kind ?? ''}`;
+      if (seen.has(key) || baseline.has(key)) continue;
+      seen.add(key);
+      out.push(s);
+    }
+  }
+  return out.slice(0, 6);
 }

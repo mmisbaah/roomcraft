@@ -68,15 +68,22 @@ function box(
 
 function cyl(
   key: string,
-  args: [number, number, number, number?],
+  args: [number, number, number, number?] | [number, number],
   pos: [number, number, number],
   color: string,
   rot?: [number, number, number],
   open?: boolean,
 ) {
+  // Callers may pass just the radius for a disc (height 0 is meaningless).
+  const a = (args.length === 2 ? [args[0], args[1], 0.001, args[1]] : args) as [
+    number,
+    number,
+    number,
+    number?,
+  ];
   return (
     <mesh key={key} position={pos} rotation={rot} castShadow receiveShadow>
-      <cylinderGeometry args={[args[0], args[1], args[2], args[3] ?? 16, 1, open ?? false]} />
+      <cylinderGeometry args={[a[0], a[1], a[2], a[3] ?? 16, 1, open ?? false]} />
       <Mat color={color} />
     </mesh>
   );
@@ -536,6 +543,335 @@ function Casegood({ f }: { f: FurnItem }) {
         }
       }
     }
+  }
+  return <group>{parts}</group>;
+}
+
+// ------------------------------------------------------------------ kitchen
+/**
+ * Kitchen pieces. Casework reuses the carcass/door/drawer logic from
+ * `Casegood`; what follows is the fittings that make it read as a kitchen —
+ * worktops, appliances, sinks, hobs, vents and trolleys.
+ */
+function Kitchen({ f }: { f: FurnItem }) {
+  const { w, d } = f;
+  const sp = f.spec;
+  const h = f.h || 0.9;
+  const c = f.color;
+  const a = f.accent;
+  const steel = '#b9c0c8';
+  const glassDark = '#232a33';
+  const parts: React.ReactNode[] = [];
+  const front = d / 2;
+
+  // Casework: carcass plus doors/drawers, and a worktop where there is one.
+  const isCasework = ['basecab', 'sinkbase', 'drawerbank', 'island', 'peninsula', 'pantry', 'cart', 'recycle'].includes(f.kind);
+  if (isCasework) {
+    const plinth = 0.1;
+    parts.push(box('body', [w, h - 0.04 - plinth, d], [0, plinth + (h - 0.04 - plinth) / 2, 0], c));
+    // Recessed plinth reads as a real kitchen cabinet rather than a solid block.
+    parts.push(box('plinth', [w - 0.06, plinth, d - 0.06], [0, plinth / 2, 0], a));
+    parts.push(box('top', [w + 0.04, 0.04, d + 0.03], [0, h - 0.02, 0], sp.wood || sp.reclaimed ? '#a67c52' : '#3f4650'));
+
+    if (f.kind === 'sinkbase') {
+      // Inset basin + mixer tap.
+      parts.push(box('basin', [w * 0.5, 0.06, d * 0.6], [0, h - 0.05, 0], '#cfd6dd'));
+      parts.push(box('basinIn', [w * 0.44, 0.05, d * 0.52], [0, h - 0.06, 0], steel));
+      parts.push(cyl('tap', [0.018, 0.26], [0, h + 0.13, -d * 0.3], steel));
+      parts.push(box('spout', [0.02, 0.02, 0.14], [0, h + 0.25, -d * 0.3 + 0.07], steel));
+    }
+
+    const doors = sp.doors ?? 0;
+    if (doors > 0) {
+      const gap = 0.02;
+      const dw = (w - 0.08) / doors - gap;
+      for (let i = 0; i < doors; i++) {
+        const x = -(w - 0.08) / 2 + (dw + gap) * (i + 0.5);
+        parts.push(box(`dr${i}`, [dw, h - 0.04 - plinth - 0.08, 0.02], [x, plinth + (h - 0.04 - plinth) / 2, front + 0.012], a));
+        parts.push(box(`hd${i}`, [0.022, 0.9, 0.028], [x + dw / 2 - 0.06, h * 0.62, front + 0.032], steel));
+      }
+    }
+    const drawers = sp.drawers ?? 0;
+    for (let i = 0; i < drawers; i++) {
+      const dh = (h - 0.04 - plinth - 0.06) / drawers;
+      const y = plinth + 0.03 + dh * (i + 0.5);
+      parts.push(box(`dr${i}`, [w - 0.1, dh - 0.02, 0.02], [0, y, front + 0.012], a));
+      parts.push(box(`hd${i}`, [w * 0.42, 0.02, 0.028], [0, y, front + 0.032], steel));
+    }
+  } else if (f.kind === 'wallcab') {
+    // Wall cabinets hang from their anchor height and may be open shelving.
+    const y0 = -h / 2;
+    if (sp.open) {
+      const t = 0.03;
+      parts.push(box('L', [t, h, d], [-w / 2 + t / 2, 0, 0], c));
+      parts.push(box('R', [t, h, d], [w / 2 - t / 2, 0, 0], c));
+      parts.push(box('T', [w, t, d], [0, h / 2 - t / 2, 0], c));
+      const n = 2;
+      for (let i = 0; i < n; i++) {
+        parts.push(box(`sh${i}`, [w - t * 2, 0.025, d - 0.03], [0, -h / 2 + 0.03 + ((h - 0.06) / n) * (i + 1), 0], c));
+      }
+      // a little crockery so the shelf isn't bare
+      for (let i = 0; i < 4; i++) {
+        parts.push(cyl(`cr${i}`, [0.05, 0.05], [-w / 3 + (i % 2) * 0.14, h / 2 - 0.1, -0.02 + Math.floor(i / 2) * 0.08], ['#e8e3d9', '#d9c2a0'][i % 2]));
+      }
+    } else {
+      const doors = sp.doors ?? 2;
+      parts.push(box('body', [w, h, d], [0, 0, 0], c));
+      const gap = 0.018;
+      const dw = (w - 0.06) / doors - gap;
+      for (let i = 0; i < doors; i++) {
+        const x = -(w - 0.06) / 2 + (dw + gap) * (i + 0.5);
+        parts.push(box(`dr${i}`, [dw, h - 0.06, 0.02], [x, 0, front + 0.012], a));
+        parts.push(box(`hd${i}`, [0.02, 0.02, 0.026], [x, -h / 2 + 0.07, front + 0.03], steel));
+      }
+    }
+  } else if (f.kind === 'fridge' || f.kind === 'freezer') {
+    const glass = sp.doors === 'glass';
+    if (f.kind === 'freezer') {
+      // Chest freezer: a wide lid on a squat body.
+      parts.push(box('body', [w, h - 0.06, d], [0, (h - 0.06) / 2, 0], c));
+      parts.push(box('lid', [w + 0.03, 0.06, d + 0.03], [0, h - 0.03, 0], steel));
+      parts.push(box('handle', [w * 0.5, 0.025, 0.03], [0, h - 0.1, front + 0.02], '#3d405b'));
+    } else if (sp.doors === 'french') {
+      parts.push(box('body', [w, h, d], [0, h / 2, 0], c));
+      parts.push(box('l', [w / 2 - 0.02, h * 0.72, 0.025], [-w / 4, h * 0.5, front + 0.014], glass ? '#7d99b0' : a));
+      parts.push(box('r', [w / 2 - 0.02, h * 0.72, 0.025], [w / 4, h * 0.5, front + 0.014], glass ? '#7d99b0' : a));
+      parts.push(box('fz', [w - 0.04, h * 0.16, 0.025], [0, h * 0.1, front + 0.014], a));
+      // Vertical bar handles either side of the split.
+      parts.push(box('hl', [0.02, h * 0.5, 0.03], [-0.03, h * 0.5, front + 0.035], steel));
+      parts.push(box('hr', [0.02, h * 0.5, 0.03], [0.03, h * 0.5, front + 0.035], steel));
+    } else {
+      parts.push(box('body', [w, h, d], [0, h / 2, 0], c));
+      parts.push(box('door', [w - 0.03, h - 0.05, 0.025], [0, h / 2, front + 0.014], glass ? '#5f7d94' : a));
+      parts.push(box('handle', [0.02, h * 0.6, 0.03], [w / 2 - 0.08, h * 0.5, front + 0.035], steel));
+    }
+  } else if (f.kind === 'range') {
+    parts.push(box('body', [w, h - 0.06, d], [0, (h - 0.06) / 2, 0], c));
+    parts.push(box('oven', [w - 0.08, h * 0.6, 0.025], [0, h * 0.36, front + 0.014], glassDark));
+    parts.push(box('ovenHandle', [w * 0.7, 0.03, 0.03], [0, h * 0.68, front + 0.035], steel));
+    // Hob top with burners.
+    parts.push(box('hob', [w, 0.03, d], [0, h - 0.015, 0], glassDark));
+    const rings = sp.burners ?? 4;
+    for (let i = 0; i < rings; i++) {
+      const gx = ((i % 2) - 0.5) * w * 0.42;
+      const gz = (Math.floor(i / 2) - 0.5) * d * 0.42;
+      parts.push(
+        <mesh key={`bn${i}`} position={[gx, h + 0.005, gz]} rotation={[-Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[w * 0.07, 0.008, 6, 16]} />
+          <Mat color={steel} metal={0.8} rough={0.3} />
+        </mesh>,
+      );
+    }
+    for (let i = 0; i < 4; i++) {
+      parts.push(cyl(`kn${i}`, [0.028, 0.022], [-w / 2 + 0.08 + (i % 2) * 0.07, h * 0.82, front + 0.03], steel));
+    }
+  } else if (f.kind === 'cooktop') {
+    // Flush glass hob — sits at counter height, no carcass.
+    parts.push(box('glass', [w, 0.02, d], [0, h - 0.01, 0], glassDark));
+    const zones = sp.zones ?? 4;
+    for (let i = 0; i < zones; i++) {
+      const gx = ((i % 2) - 0.5) * w * 0.42;
+      const gz = (Math.floor(i / 2) - 0.5) * d * 0.42;
+      parts.push(
+        <mesh key={`zn${i}`} position={[gx, h + 0.002, gz]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[w * 0.09, w * 0.115, 18]} />
+          <Mat color="#6f7a86" metal={0.4} rough={0.5} />
+        </mesh>,
+      );
+    }
+  } else if (f.kind === 'dishwasher' || f.kind === 'microwave') {
+    parts.push(box('body', [w, h, d], [0, 0, 0], c));
+    parts.push(box('panel', [w - 0.03, h - 0.03, 0.02], [0, 0, front + 0.012], a));
+    if (f.kind === 'dishwasher') {
+      parts.push(box('handle', [w - 0.1, 0.025, 0.03], [0, h / 2 - 0.09, front + 0.032], steel));
+    } else {
+      parts.push(box('door', [w - 0.06, h * 0.66, 0.02], [0, -h * 0.06, front + 0.014], glassDark));
+      parts.push(box('ctrl', [w - 0.06, h * 0.16, 0.018], [0, h * 0.36, front + 0.014], '#2b323b'));
+    }
+  } else if (f.kind === 'hood') {
+    // Chimney hood: canopy at the anchor, duct running up out of frame.
+    const canopyH = 0.28;
+    parts.push(box('canopy', [w, canopyH, d], [0, canopyH / 2, 0], steel));
+    parts.push(box('duct', [w * 0.26, 0.9, d * 0.42], [0, canopyH + 0.45, -d * 0.1], a));
+    parts.push(box('filter', [w - 0.05, 0.02, d - 0.05], [0, 0.012, 0], '#4b5563'));
+    for (let i = 0; i < 2; i++) {
+      parts.push(box(`lt${i}`, [w - 0.1, 0.015, 0.03], [0, 0.006, -d * 0.24 + i * d * 0.48], '#fff3c4'));
+    }
+  }
+
+  // Trolleys get castors so they read as mobile rather than solid boxes.
+  if (f.kind === 'cart' || f.kind === 'serving' || f.kind === 'barcart') {
+    for (const [sx, sz] of [
+      [-1, -1],
+      [1, -1],
+      [-1, 1],
+      [1, 1],
+    ]) {
+      parts.push(
+        <mesh key={`wh${sx}${sz}`} position={[sx * (w / 2 - 0.06), 0.05, sz * (d / 2 - 0.06)]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.05, 0.05, 0.03, 10]} />
+          <Mat color="#3d405b" metal={0.5} rough={0.5} />
+        </mesh>,
+      );
+    }
+  }
+
+  return <group>{parts}</group>;
+}
+
+// ------------------------------------------------------------------- dining
+/** Dining tables, sideboards and the glass-fronted storage that dresses them. */
+function Dining({ f }: { f: FurnItem }) {
+  const { w, d } = f;
+  const sp = f.spec;
+  const h = f.h || 0.75;
+  const c = f.color;
+  const a = f.accent;
+  const parts: React.ReactNode[] = [];
+  const isTable = ['dining', 'round', 'trestle', 'bar', 'oval', 'banquet'].includes(f.kind);
+
+  if (isTable) {
+    const topT = 0.045;
+    const topMat = sp.glass ? '#cfe3ea' : sp.reclaimed ? '#a67c52' : c;
+    if (f.kind === 'round') {
+      parts.push(cyl('top', [w / 2, topT], [0, h - topT / 2, 0], topMat));
+      parts.push(cyl('col', [0.07, h - topT], [0, (h - topT) / 2, 0], a));
+      parts.push(cyl('foot', [Math.min(w, d) * 0.3, 0.05], [0, 0.025, 0], a));
+    } else if (f.kind === 'oval') {
+      parts.push(box('top', [w, topT, d], [0, h - topT / 2, 0], topMat));
+      for (const [sx, sz] of [
+        [-1, -1],
+        [1, -1],
+        [-1, 1],
+        [1, 1],
+      ]) {
+        parts.push(box(`lg${sx}${sz}`, [0.07, h - topT, 0.07], [sx * (w / 2 - 0.12), (h - topT) / 2, sz * (d / 2 - 0.1)], a));
+      }
+    } else if (f.kind === 'trestle' || f.kind === 'bar') {
+      parts.push(box('top', [w, topT, d], [0, h - topT / 2, 0], topMat));
+      parts.push(box('rail', [w * 0.62, 0.08, 0.06], [0, h - 0.2, 0], a));
+      for (const sx of [-1, 1]) {
+        parts.push(box(`tr${sx}`, [0.08, h - topT, d * 0.5], [sx * w * 0.28, (h - topT) / 2, 0], a));
+        parts.push(box(`ft${sx}`, [0.1, 0.06, d * 0.62], [sx * w * 0.28, 0.03, 0], a));
+      }
+    } else {
+      parts.push(box('top', [w, topT, d], [0, h - topT / 2, 0], topMat));
+      // Apron under the top, then four tapered legs.
+      parts.push(box('apron', [w - 0.2, 0.07, d - 0.16], [0, h - topT - 0.045, 0], a));
+      for (const [sx, sz] of [
+        [-1, -1],
+        [1, -1],
+        [-1, 1],
+        [1, 1],
+      ]) {
+        parts.push(box(`lg${sx}${sz}`, [0.07, h - topT, 0.07], [sx * (w / 2 - 0.09), (h - topT) / 2, sz * (d / 2 - 0.09)], a));
+      }
+      if (sp.leaf) {
+        // Extension leaf stowed under the middle of the top.
+        parts.push(box('leaf', [w * 0.4, 0.03, d * 0.9], [0, h - topT - 0.02, 0], a));
+      }
+    }
+    return <group>{parts}</group>;
+  }
+
+  if (f.kind === 'winerack') {
+    parts.push(box('body', [w, h, d], [0, h / 2, 0], c));
+    const rows = sp.rows ?? 5;
+    for (let r = 0; r < rows; r++) {
+      const y = 0.1 + (r * (h - 0.2)) / rows;
+      parts.push(box(`sh${r}`, [w - 0.06, 0.02, d - 0.05], [0, y, 0], a));
+      // bottles lying on each shelf
+      for (let b = 0; b < 3; b++) {
+        parts.push(
+          <mesh key={`bt${r}${b}`} position={[-w * 0.28 + b * w * 0.28, y + 0.055, 0]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.033, 0.033, 0.12, 8]} />
+            <Mat color={['#2f4f3a', '#3a2b4a', '#4a2b2b'][b % 3]} metal={0.1} rough={0.35} />
+          </mesh>,
+        );
+      }
+    }
+    return <group>{parts}</group>;
+  }
+
+  if (f.kind === 'platerack') {
+    parts.push(box('back', [w, h, 0.02], [0, 0, -d / 2 + 0.01], c));
+    for (const sx of [-1, 1]) parts.push(box(`sd${sx}`, [0.035, h, d], [sx * (w / 2 - 0.018), 0, 0], a));
+    const n = 2;
+    for (let i = 0; i < n; i++) {
+      const y = -h / 2 + (h / n) * (i + 1);
+      parts.push(box(`sh${i}`, [w - 0.07, 0.028, d], [0, y, 0], a));
+      // plates stood on edge in the rack
+      for (let pI = 0; pI < 4; pI++) {
+        parts.push(
+          <mesh key={`pl${i}${pI}`} position={[-w * 0.3 + pI * w * 0.2, y + 0.09, 0]} rotation={[0, 0, 0]}>
+            <cylinderGeometry args={[0.075, 0.075, 0.014, 14]} />
+            <Mat color="#e8e3d9" rough={0.35} />
+          </mesh>,
+        );
+      }
+    }
+    return <group>{parts}</group>;
+  }
+
+  if (f.kind === 'etagere') {
+    const n = sp.shelves ?? 4;
+    parts.push(box('back', [w, h, 0.018], [0, 0, -d / 2 + 0.01], a));
+    for (const sx of [-1, 1]) parts.push(box(`up${sx}`, [0.03, h, 0.03], [sx * (w / 2 - 0.015), 0, 0], c));
+    for (let i = 0; i < n; i++) {
+      const y = -h / 2 + 0.1 + (i * (h - 0.2)) / (n - 1);
+      parts.push(box(`sh${i}`, [w - 0.06, 0.024, d], [0, y, 0], c));
+      if (i % 2 === 1) parts.push(cyl(`vr${i}`, [0.05, 0.13], [w * 0.28, y + 0.077, 0], '#d9c2a0'));
+    }
+    return <group>{parts}</group>;
+  }
+
+  // Sideboards, china cabinets and consoles: carcass with doors or drawers.
+  const plinth = 0.09;
+  const glassFront = !!sp.glazed;
+  parts.push(box('body', [w, h - plinth, d], [0, plinth + (h - plinth) / 2, 0], c));
+  parts.push(box('top', [w + 0.03, 0.03, d + 0.02], [0, h - 0.015, 0], a));
+  if (sp.doors !== 0) {
+    parts.push(box('plinth', [w - 0.08, plinth, d - 0.06], [0, plinth / 2, 0], a));
+  }
+  const front = d / 2;
+  const doors = sp.doors ?? 0;
+  if (glassFront) {
+    // Glazed upper case over a solid base — the china-cabinet silhouette.
+    const baseH = h * 0.34;
+    parts.push(box('baseDr', [w - 0.06, baseH, 0.02], [0, plinth + baseH / 2, front + 0.012], a));
+    const upperY = plinth + baseH + (h - plinth - baseH) / 2;
+    const upperH = h - plinth - baseH - 0.04;
+    parts.push(box('glassDoor', [w - 0.07, upperH, 0.015], [0, upperY, front + 0.012], '#cfe8f0'));
+    for (let s = 0; s < 2; s++) {
+      parts.push(box(`ish${s}`, [w - 0.12, 0.022, d - 0.08], [0, upperY - upperH / 4 + s * (upperH / 2), -0.02], a));
+    }
+    for (let i = 0; i < Math.max(1, Math.round(w / 0.4)); i++) {
+      parts.push(
+        <mesh key={`pl${i}`} position={[-w / 2 + 0.18 + i * 0.3, upperY + upperH / 4, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.07, 0.07, 0.012, 12]} />
+          <Mat color="#e8e3d9" rough={0.35} />
+        </mesh>,
+      );
+    }
+  } else if (doors > 0) {
+    const gap = 0.02;
+    const dw = (w - 0.08) / doors - gap;
+    for (let i = 0; i < doors; i++) {
+      const x = -(w - 0.08) / 2 + (dw + gap) * (i + 0.5);
+      parts.push(box(`dr${i}`, [dw, h - plinth - 0.08, 0.02], [x, plinth + (h - plinth) / 2, front + 0.012], a));
+      parts.push(box(`hd${i}`, [0.022, 0.11, 0.028], [x + dw / 2 - 0.05, plinth + (h - plinth) * 0.62, front + 0.032], '#3d405b'));
+    }
+  } else {
+    // Open console: one shelf between the legs.
+    for (const [sx, sz] of [
+      [-1, -1],
+      [1, -1],
+      [-1, 1],
+      [1, 1],
+    ]) {
+      parts.push(box(`lg${sx}${sz}`, [0.05, h - 0.05, 0.05], [sx * (w / 2 - 0.05), (h - 0.05) / 2, sz * (d / 2 - 0.05)], a));
+    }
+    parts.push(box('shelf', [w - 0.14, 0.025, d - 0.1], [0, h * 0.3, 0], a));
   }
   return <group>{parts}</group>;
 }
@@ -2337,6 +2673,10 @@ export function FurnitureBody({ item }: { item: FurnItem }) {
       return <Tabletop f={item} />;
     case 'functional':
       return <Functional f={item} />;
+    case 'kitchen':
+      return <Kitchen f={item} />;
+    case 'dining':
+      return <Dining f={item} />;
     case 'vanity':
       return <Vanity f={item} />;
     case 'bathtub':

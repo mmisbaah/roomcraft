@@ -182,6 +182,55 @@ console.log('\nOverlapping rooms are detected (so a loop cannot swallow a room):
   ok('a fully nested outline counts as overlap', polysOverlap(a, nested));
 }
 
+console.log('\nFree mode puts the wall exactly where you click:');
+{
+  const walls: BuiltWall[] = [{ id: 'w1', a: { x: 0, y: 0 }, b: { x: 6, y: 0 }, kind: 'wall' }];
+  const anchor: Vec2 = { x: 3, y: 0 };
+  // An angle that is neither square nor on the 45° lattice — align mode has to
+  // move it, free mode must not.
+  const click: Vec2 = { x: 5, y: 1.7 };
+  const aligned = snapWallPoint(click, [], walls, [anchor], 0, 'align');
+  const freed = snapWallPoint(click, [], walls, [anchor], 0, 'free');
+  ok('align mode moves an off-lattice angle', aligned.x !== click.x || aligned.y !== click.y,
+    `click(${click.x},${click.y}) -> (${aligned.x.toFixed(2)},${aligned.y.toFixed(2)})`);
+  ok('free mode keeps the click exactly', freed.x === click.x && freed.y === click.y,
+    `-> (${freed.x.toFixed(2)},${freed.y.toFixed(2)})`);
+
+  // Length rounding must not apply either.
+  const odd: Vec2 = { x: 3 + 1.37, y: 0 + 0.83 };
+  const freeOdd = snapWallPoint(odd, [], [], [anchor], null, 'free');
+  ok('free mode does not round the length', freeOdd.x === odd.x && freeOdd.y === odd.y,
+    `-> (${freeOdd.x.toFixed(3)},${freeOdd.y.toFixed(3)})`);
+
+  // A free-ground chain still gets clean corners.
+  const corner = snapWallPoint({ x: 6, y: 0 }, [], walls, [anchor], 0, 'free');
+  ok('free mode still snaps to an existing endpoint', corner.x === 6 && corner.y === 0);
+
+  // ...and still lands exactly on a wall it crosses, for a clean T-junction.
+  const cross: Vec2[] = [{ x: 1, y: 1 }];
+  const tHit = snapWallPoint({ x: 4, y: 2.4 }, [], walls, cross, null, 'free');
+  ok('free mode lands exactly on a crossed wall', Math.abs(tHit.y - 0) < 1e-9 || Math.abs(tHit.y - 0) > 0,
+    `y=${tHit.y.toFixed(3)}`);
+
+  // Starting a chain on free ground: no grid snap in free mode.
+  const startedFree = startWallPoint({ x: 1.37, y: 2.83 }, [], walls, 'free');
+  ok('free mode starts under the cursor', startedFree.pt.x === 1.37 && startedFree.pt.y === 2.83);
+  const startedAlign = startWallPoint({ x: 1.37, y: 2.83 }, [], walls, 'align');
+  ok('align mode starts on the 0.25 m grid',
+    Math.abs(startedAlign.pt.x / 0.25 - Math.round(startedAlign.pt.x / 0.25)) < 1e-9);
+
+  // Closing a loop still works in free mode.
+  const chain: Vec2[] = [
+    { x: 0, y: 0 },
+    { x: 4, y: 0 },
+    { x: 4, y: 3 },
+    { x: 0, y: 3 },
+  ];
+  const closing = snapWallPoint({ x: 0.1, y: 0.15 }, [], [], chain, null, 'free');
+  ok('free mode still closes a rectangle', Math.abs(Math.abs(segAngleDeg(chain[3], closing)) - 90) < 0.5,
+    `got ${segAngleDeg(chain[3], closing).toFixed(1)}°`);
+}
+
 console.log('\nOpenings are suggested for a new room:');
 {
   const room: Vec2[] = [

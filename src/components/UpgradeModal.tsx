@@ -34,7 +34,7 @@ const PLANS = [
     price: '$9.99',
     tag: 'Complete library',
     features: [
-      'All 20 items per category (460 total)',
+      'All 20 items per category (500 total)',
       'Every style & colourway',
       'Colour swaps on any item',
       'Commercial-use GLB exports',
@@ -70,8 +70,9 @@ export default function UpgradeModal() {
         </button>
         <h2>Unlock the full RoomCraft library</h2>
         <p className="muted center">
-          3 free items across each of the 23 categories gets you started — Pro adds 5 more per
-          category, Max opens all 20 (460 pieces in total).
+          3 free items across each of the 25 categories gets you started — Pro adds 5 more per
+          category, Max opens all 20 (500 pieces in total, including a full kitchen and
+          dining-room range).
         </p>
 
         <div className="plans">

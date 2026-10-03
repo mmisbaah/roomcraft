@@ -1,9 +1,9 @@
-// RoomCraft item library — 23 categories × 20 items = 460 items.
+// RoomCraft item library — 25 categories × 20 items = 500 items.
 // Tiers by row index: rows 0–2 free, 3–7 pro, 8–19 max.
 // All source art is generated procedurally from these specs (CC0 / no
 // external assets needed); specs drive both the 2D footprint and the 3D meshes.
-// Categories 18–23 are the bathroom suite (vanity, tub, shower, toilet,
-// towel rack, vanity mirror).
+// The bathroom suite (vanity, tub, shower, toilet, towel rack, vanity mirror)
+// and the kitchen + dining sections close out the list.
 //
 // Height semantics (`h`) per mount:
 //   floor    → total height (tables: top surface height → used as support)
@@ -652,11 +652,69 @@ const VAMIRROR = build('vamirror', 'wall', { c: [...METAL, ...WOOD_DARK, ...BRAS
   { n: 'Backlit Halo Mirror', k: 'mirror', s: 'Luxury', w: 0.66, d: 0.06, h: 1.5, sp: { style: 'led' } },
 ]);
 
+// ---------------------------------------------------------------- kitchen
+// The working kitchen: the box (cabinets, appliances, sink), the work surface
+// (islands, peninsulas, carts) and the ventilation above it.
+//
+// Heights follow the same rule as the bathroom suite: `h` is the top surface
+// for counter-height pieces (~0.88–0.95 m) so a table lamp or fruit bowl can
+// actually be stood on them, and total height for appliances.
+const KITCHEN = build('kitchen', 'floor', { c: [...METAL, ...LIGHT, ...WOOD], a: [...WOOD_DARK, ...METAL] }, [
+  { n: 'French Door Fridge', k: 'fridge', s: 'Modern', w: 0.9, d: 0.75, h: 1.85, sp: { doors: 'french' } },
+  { n: 'Base Cabinet Run', k: 'basecab', s: 'Shaker', w: 1.8, d: 0.6, h: 0.88, sp: { doors: 3 } },
+  { n: 'Kitchen Island', k: 'island', s: 'Modern', w: 1.8, d: 0.9, h: 0.92, sp: { doors: 2 } },
+  { n: 'Gas Range & Oven', k: 'range', s: 'Professional', w: 0.75, d: 0.65, h: 0.92, sp: { burners: 5 } },
+  { n: 'Sink Base Unit', k: 'sinkbase', s: 'Shaker', w: 0.9, d: 0.6, h: 0.88, sp: { sink: 'under' } },
+  { n: 'Tall Pantry Cabinet', k: 'pantry', s: 'Shaker', w: 0.6, d: 0.6, h: 2.1, sp: { doors: 1 } },
+  { n: 'Wall Cabinet Double', k: 'wallcab', s: 'Shaker', w: 1.2, d: 0.35, h: 1.5, m: 'wall', sp: { doors: 2 } },
+  { n: 'Kitchen Peninsula', k: 'peninsula', s: 'Contemporary', w: 1.6, d: 0.7, h: 0.92, sp: { doors: 1 } },
+  { n: 'Range Hood', k: 'hood', s: 'Industrial', w: 0.75, d: 0.5, h: 1.7, m: 'wall', sp: { style: 'chimney' } },
+  { n: 'Dishwasher Panel', k: 'dishwasher', s: 'Integrated', w: 0.6, d: 0.6, h: 0.88, sp: { style: 'panel' } },
+  { n: 'Butcher Block Island', k: 'island', s: 'Farmhouse', w: 1.5, d: 0.8, h: 0.95, sp: { wood: true } },
+  { n: 'Kitchen Cart', k: 'cart', s: 'Industrial', w: 0.8, d: 0.45, h: 0.9, sp: { wheels: 4 } },
+  { n: 'Chest Freezer', k: 'freezer', s: 'Commercial', w: 0.9, d: 0.7, h: 0.9, sp: { lid: 'chest' } },
+  { n: 'Drawer Bank', k: 'drawerbank', s: 'Shaker', w: 0.6, d: 0.6, h: 0.88, sp: { drawers: 3 } },
+  { n: 'Open Shelf Unit', k: 'wallcab', s: 'Industrial', w: 0.9, d: 0.3, h: 1.4, m: 'wall', sp: { open: true } },
+  { n: 'Built-in Microwave', k: 'microwave', s: 'Modern', w: 0.5, d: 0.4, h: 1.5, m: 'wall', sp: { style: 'built-in' } },
+  { n: 'Induction Cooktop', k: 'cooktop', s: 'Minimalist', w: 0.6, d: 0.52, h: 0.9, sp: { zones: 4 } },
+  { n: 'Wine Fridge', k: 'fridge', s: 'Luxury', w: 0.45, d: 0.55, h: 0.9, sp: { doors: 'glass' } },
+  { n: 'Recycling Pull-out', k: 'recycle', s: 'Modern', w: 0.5, d: 0.55, h: 0.8, sp: { bins: 2 } },
+  { n: 'Corner Base Cabinet', k: 'basecab', s: 'Traditional', w: 0.9, d: 0.9, h: 0.88, sp: { corner: true } },
+]);
+
+// ----------------------------------------------------------------- dining
+// The dining room proper: tables of every shape, the storage that backs them
+// (sideboards, china cabinets, wine racks) and the serving pieces that make a
+// table look laid rather than bare.
+const DINING = build('dining', 'floor', { c: [...WOOD, ...FABRIC, ...LIGHT], a: [...WOOD_DARK, ...BRASS] }, [
+  { n: 'Extendable Oak Table', k: 'dining', s: 'Farmhouse', w: 1.8, d: 0.9, h: 0.75, sp: { leaf: true } },
+  { n: 'Round Pedestal Table', k: 'round', s: 'Traditional', w: 1.2, d: 1.2, h: 0.75, sp: { base: 'pedestal' } },
+  { n: 'Buffet Sideboard', k: 'buffet', s: 'Mid-Century', w: 1.6, d: 0.45, h: 0.85, sp: { doors: 3 } },
+  { n: 'Trestle Farmhouse Table', k: 'trestle', s: 'Farmhouse', w: 2.0, d: 0.9, h: 0.76, sp: { base: 'trestle' } },
+  { n: 'Bar Height Table', k: 'bar', s: 'Industrial', w: 1.4, d: 0.7, h: 1.05, sp: { base: 'trestle' } },
+  { n: 'China Cabinet', k: 'china', s: 'Traditional', w: 1.0, d: 0.45, h: 1.9, sp: { glazed: true } },
+  { n: 'Oval Dining Table', k: 'oval', s: 'Contemporary', w: 1.8, d: 1.0, h: 0.75, sp: { legs: 4 } },
+  { n: 'Bistro Round Table', k: 'round', s: 'Parisian', w: 0.8, d: 0.8, h: 0.74, sp: { base: 'pedestal' } },
+  { n: 'Serving Cart', k: 'serving', s: 'Mid-Century', w: 0.9, d: 0.45, h: 0.8, sp: { wheels: 4 } },
+  { n: 'Narrow Banquet Table', k: 'banquet', s: 'Classic', w: 0.8, d: 1.6, h: 0.75, sp: { legs: 4 } },
+  { n: 'Wine Rack Cabinet', k: 'winerack', s: 'Cellar', w: 0.6, d: 0.4, h: 1.2, sp: { rows: 5 } },
+  { n: 'Bench Dining Seat', k: 'bench', s: 'Farmhouse', w: 1.5, d: 0.4, h: 0.45, sp: { slats: 3 } },
+  { n: 'Plate Rack Shelf', k: 'platerack', s: 'Cottage', w: 1.0, d: 0.28, h: 1.5, m: 'wall', sp: { shelf: true } },
+  { n: 'Glass Top Table', k: 'dining', s: 'Modern', w: 1.4, d: 0.85, h: 0.75, sp: { glass: true } },
+  { n: 'Bar Cart', k: 'barcart', s: 'Art Deco', w: 0.7, d: 0.45, h: 1.0, sp: { style: 'deco' } },
+  { n: 'Etagere Display Shelf', k: 'etagere', s: 'Victorian', w: 0.8, d: 0.4, h: 1.8, sp: { shelves: 4 } },
+  { n: 'Reclaimed Wood Table', k: 'trestle', s: 'Rustic', w: 1.6, d: 0.85, h: 0.75, sp: { base: 'trestle', reclaimed: true } },
+  { n: 'Console Behind Dining', k: 'console', s: 'Classic', w: 1.2, d: 0.35, h: 0.8, sp: { doors: 0 } },
+  { n: 'Corner Hutch', k: 'china', s: 'Colonial', w: 1.0, d: 0.5, h: 2.0, sp: { glazed: true, corner: true } },
+  { n: 'Lazy Susan Cabinet', k: 'china', s: 'Cottage', w: 1.0, d: 1.0, h: 1.8, sp: { corner: true } },
+]);
+
 export const LIBRARY: FurnItem[] = [
   ...SEATING, ...TABLES, ...STORAGE, ...BEDS,
   ...CEILING, ...WALLLIGHT, ...LAMPS, ...ARCH,
   ...FLOORPLANTS, ...TABLEPLANTS, ...SUCCULENTS, ...HANGING, ...TREES,
   ...TEXTILES, ...WALLDECOR, ...TABLETOP, ...FUNCTIONAL,
+  ...KITCHEN, ...DINING,
   ...VANITY, ...BATHTUB, ...SHOWER, ...TOILET, ...TOWELRACK, ...VAMIRROR,
 ];
 

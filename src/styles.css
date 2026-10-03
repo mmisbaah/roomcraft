@@ -412,6 +412,42 @@ kbd {
 }
 
 /* Room label + purpose editor in the detail panel. */
+/* "What is this room for?" prompt, shown as soon as a room is formed. */
+.room-prompt {
+  max-width: 420px;
+  display: grid;
+  gap: 10px;
+}
+
+.room-prompt h2 {
+  margin-bottom: 2px;
+}
+
+.room-prompt textarea {
+  width: 100%;
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  color: inherit;
+  resize: vertical;
+  background: #fff;
+  border: 1px solid #d6dbe4;
+  border-radius: 6px;
+}
+
+.room-prompt textarea:focus {
+  outline: 2px solid #4f6df5;
+  outline-offset: -1px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 .room-editor {
   display: grid;
   gap: 8px;

@@ -6,6 +6,7 @@ import DetailPanel from './components/DetailPanel';
 import Canvas2D from './components/Canvas2D';
 import Scene3D from './three/Scene3D';
 import UpgradeModal from './components/UpgradeModal';
+import RoomPromptModal from './components/RoomPromptModal';
 import Welcome from './components/Welcome';
 import { selectArea } from './store';
 import { TIER_RANK } from './types';
@@ -55,6 +56,7 @@ export default function App() {
       </div>
       <StatusBar />
       <UpgradeModal />
+      <RoomPromptModal />
       <Welcome />
       {/* tier is read by Library / DetailPanel via store; keep reference to avoid lint noise */}
       <span hidden data-tier={TIER_RANK[tier]} />

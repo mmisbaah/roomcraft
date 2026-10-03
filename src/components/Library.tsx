@@ -1,4 +1,4 @@
-// Left sidebar: the item library (3 free / 8 pro / 20 max per category, 23 categories).
+// Left sidebar: the item library (3 free / 8 pro / 20 max per category, 25 categories).
 
 import { useState } from 'react';
 import { itemsOf } from '../data/items';
@@ -38,7 +38,7 @@ export default function Library() {
           onChange={(e) => setQ(e.target.value)}
         />
         <p className="library-sub">
-          <b>{counts('seating').unlocked}</b> of 20 unlocked per category · 23 categories ·{' '}
+          <b>{counts('seating').unlocked}</b> of 20 unlocked per category · {TYPE_ORDER.length} categories ·{' '}
           <button className="link" onClick={() => setUpgradeOpen(true)}>
             compare plans
           </button>

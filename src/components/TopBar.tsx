@@ -29,6 +29,8 @@ export default function TopBar() {
   const setEdgeEdit = useStore((s) => s.setEdgeEdit);
   const wallBuild = useStore((s) => s.wallBuild);
   const setWallBuild = useStore((s) => s.setWallBuild);
+  const wallSnap = useStore((s) => s.wallSnap);
+  const setWallSnap = useStore((s) => s.setWallSnap);
   const setUpgradeOpen = useStore((s) => s.setUpgradeOpen);
   const toastMsg = useStore((s) => s.toastMsg);
   const saveProject = useStore((s) => s.saveProject);
@@ -78,13 +80,30 @@ export default function TopBar() {
 
       <div className="topbar-actions">
         {mode !== '3d' && (
-          <button
-            className={`btn ghost ${wallBuild ? 'active' : ''}`}
-            onClick={() => setWallBuild(!wallBuild)}
-            title="Draw free walls anywhere on the ground"
-          >
-            🧱 Build walls
-          </button>
+          <>
+            <button
+              className={`btn ghost ${wallBuild ? 'active' : ''}`}
+              onClick={() => setWallBuild(!wallBuild)}
+              title="Draw free walls anywhere on the ground"
+            >
+              🧱 Build walls
+            </button>
+            {/* Free mode is the escape hatch when align keeps pulling walls off
+                the angle you wanted: no 45° lattice, no 0.25 m length steps. */}
+            {wallBuild && (
+              <button
+                className={`btn ghost ${wallSnap === 'free' ? 'active' : ''}`}
+                onClick={() => setWallSnap(wallSnap === 'free' ? 'align' : 'free')}
+                title={
+                  wallSnap === 'free'
+                    ? 'Free drawing: walls follow the cursor exactly. Click to snap to 45° again.'
+                    : 'Aligned: walls snap square and to 45°. Click to draw at any angle.'
+                }
+              >
+                {wallSnap === 'free' ? '✏️ Free' : '📐 Align'}
+              </button>
+            )}
+          </>
         )}
         {mode === 'furnish' && room && (
           <>
