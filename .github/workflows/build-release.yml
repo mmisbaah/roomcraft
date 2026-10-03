@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+defaults:
+  run:
+    shell: pwsh
+
 jobs:
   build:
     runs-on: windows-latest
@@ -31,6 +35,17 @@ jobs:
         run: npx electron-builder --win --x64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Prove the packaged app can actually boot and find its entry HTML,
+      # so a broken build fails here instead of shipping a broken download.
+      - name: Self-test packaged app
+        shell: cmd
+        run: |
+          echo Listing app.asar contents:
+          npx asar list "dist-electron\win-unpacked\resources\app.asar"
+          echo.
+          echo Running packaged binary with --selftest:
+          "dist-electron\win-unpacked\RoomCraft.exe" --selftest
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Draw your floorplan, AI fills it with furniture - 2D and 3D DIY interior design",
-  "main": "electron-main.js",
+  "main": "electron-main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -12,6 +12,8 @@
     "preview": "vite preview",
     "electron:dev": "concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "electron:build": "vite build && electron-builder",
+    "verify:electron": "node verify-electron.cjs && node test-index-resolve.cjs",
+    "icon": "node make-icon.cjs",
     "dist": "npm run electron:build"
   },
   "dependencies": {
@@ -45,8 +47,8 @@
     },
     "files": [
       "dist/**/*",
-      "electron-main.js",
-      "preload.js",
+      "electron-main.cjs",
+      "preload.cjs",
       "package.json"
     ],
     "win": {
