@@ -1,0 +1,26 @@
+Make typecheck trustworthy and gate the release on it
+
+The tsconfig.check.json fix for unresolvable `three` imports was committed
+without being able to verify it: the local @types/three was truncated (83 files
+instead of ~1000), so there was no way to tell a working mapping from one that
+happened to hide the same noise.
+
+Verified against a complete copy of @types/three installed elsewhere: 0 errors
+across the whole codebase, including every `three` import, every React
+Three-Fiber intrinsic, and the kitchen/dining builders added in the previous
+commit. Confirmed the check is live by injecting a deliberate type error into
+src/three/Furniture.tsx and seeing tsc report it, then reverting.
+
+A truncated install cannot fail loudly on its own — it resolves, then reports
+~480 missing-name errors that read exactly like a code problem. So
+check-types-deps.mjs now verifies the package is whole before tsc runs, and
+typecheck refuses to report noise as errors. On this machine it correctly
+failed with "83 files, missing: src/objects/Group.d.ts..." until the package was
+repaired.
+
+CI now runs typecheck and all three unit suites before building, so a type error
+or a broken placement rule fails the release instead of shipping.
+
+Also bumps package.json to 0.3.0 so the packaged asset name matches the tag —
+v0.3.0 shipped as RoomCraft-0.2.0-x64.exe because the version had been left at
+0.2.0 from the previous release.

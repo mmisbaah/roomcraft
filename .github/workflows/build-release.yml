@@ -28,6 +28,19 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      # Type checking runs before the build so a type error fails the release
+      # instead of shipping. check-types-deps.mjs guards against a partial
+      # @types/three install, which otherwise turns every `three` import into
+      # noise and hides the real errors.
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: |
+          npm run test:placement
+          npm run test:walls
+          npm run test:rooms
+
       - name: Build web app
         run: npm run build
 

@@ -1,45 +1,6 @@
-# Dependencies
-node_modules/
-.pnp
-.pnp.js
+# Build + test output that should never be committed.
+test-*.cjs
 
-# Build outputs
+node_modules/
 dist/
 dist-electron/
-*.local
-
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Environment
-.env
-.env.local
-.env.*.local
-
-# Electron
-dist-electron/
-*.exe
-*.dmg
-*.AppImage
-*.snap
-
-# Test coverage
-coverage/
-
-# Misc
-*.log
-*.pid
-*.seed
-*.pid.lock
