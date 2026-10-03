@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { canvas2DRef } from '../refs';
-import { snapWallPoint, useStore } from '../store';
+import { useStore } from '../store';
+import { snapWallPoint } from '../logic/wallsnap';
 import { objectHotkey } from '../logic/hotkeys';
-import { distPointSeg, polyCentroid } from '../logic/geometry';
+import { distPointSeg, pointInPoly, polyArea, polyCentroid } from '../logic/geometry';
 import { CELL } from '../logic/grid';
 import { ITEM_INDEX } from '../data/items';
-import type { EdgeKind, FurnItem, PlacedItem, Vec2 } from '../types';
+import type { EdgeKind, FurnItem, PlacedItem, Room, Vec2 } from '../types';
 import { TYPE_ICON } from '../types';
+import { ROOM_LABEL } from '../logic/placement';
 
 const PAD = 56;
 /** Fixed px-per-meter while drawing so clicks map predictably to the room. */
@@ -45,6 +47,13 @@ interface View {
   panY: number;
 }
 
+/**
+ * Identify one edge across the whole plan. Edge indices restart per room, so a
+ * bare index would let hovering (or cycling) an edge in one room act on the
+ * matching index of another.
+ */
+const edgeKey = (roomIdx: number, edgeIdx: number) => `${roomIdx}:${edgeIdx}`;
+
 function fitView(cw: number, ch: number, pts: Vec2[]): { scale: number; cx: number; cy: number } {
   if (!pts.length) return { scale: DRAW_SCALE, cx: 0, cy: 0 };
   let minx = Infinity;
@@ -63,14 +72,25 @@ function fitView(cw: number, ch: number, pts: Vec2[]): { scale: number; cx: numb
   return { scale, cx: (minx + maxx) / 2, cy: (miny + maxy) / 2 };
 }
 
-/** While drawing a new room keep a stable fixed-scale view; otherwise fit the room. */
+/** Every room outline on the plan, flattened for a bounding-box fit. */
+function allRoomPoints(rooms: Room[]): Vec2[] {
+  const out: Vec2[] = [];
+  for (const r of rooms) out.push(...r.poly);
+  return out;
+}
+
+/**
+ * While drawing a new room keep a stable fixed-scale view; otherwise fit the
+ * whole plan, so every room stays on screen when a plan has several.
+ */
 function currentFit(
   cw: number,
   ch: number,
-  st: { room: Vec2[] | null; draft: Vec2[] | null; mode: string },
+  st: { rooms: Room[]; draft: Vec2[] | null; mode: string },
 ): { scale: number; cx: number; cy: number } {
-  if (!st.room && st.mode === 'draw') return { scale: DRAW_SCALE, cx: 0, cy: 0 };
-  return fitView(cw, ch, st.room ?? st.draft ?? []);
+  if (!st.rooms.length && st.mode === 'draw') return { scale: DRAW_SCALE, cx: 0, cy: 0 };
+  const pts = st.rooms.length ? allRoomPoints(st.rooms) : st.draft ?? [];
+  return fitView(cw, ch, pts);
 }
 
 function luminance(hex: string): number {
@@ -99,7 +119,7 @@ function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
 export default function Canvas2D() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const cursorRef = useRef<Vec2 | null>(null);
-  const hoverEdgeRef = useRef<number>(-1);
+  const hoverEdgeRef = useRef<string | null>(null);
   const hoverWallRef = useRef<string | null>(null);
   /** Wall-tool click recorded on pointer-down; fires on a clean pointer-up. */
   const wallPendingRef = useRef<{ kind: 'add'; p: Vec2 } | { kind: 'delete'; id: string } | null>(null);
@@ -127,11 +147,11 @@ export default function Canvas2D() {
   const [size, setSize] = useState({ w: 800, h: 600 });
 
   // Subscribed slices — they only trigger a redraw.
-  const room = useStore((s) => s.room);
+  const rooms = useStore((s) => s.rooms);
+  const activeRoomId = useStore((s) => s.activeRoomId);
   const draft = useStore((s) => s.draft);
   const items = useStore((s) => s.items);
   const selected = useStore((s) => s.selected);
-  const openings = useStore((s) => s.openings);
   const grid = useStore((s) => s.grid);
   const mode = useStore((s) => s.mode);
   const edgeEdit = useStore((s) => s.edgeEdit);
@@ -160,7 +180,7 @@ export default function Canvas2D() {
     ctx.fillStyle = GROUND;
     ctx.fillRect(0, 0, cw, ch);
 
-    const poly = st.room ?? st.draft ?? [];
+    const drawn = st.rooms.length ? st.rooms : st.draft ? [{ poly: st.draft }] : [];
     const cursor = cursorRef.current;
     const fit = currentFit(cw, ch, st);
     const view = viewRef.current;
@@ -199,7 +219,7 @@ export default function Canvas2D() {
       ctx.stroke();
     }
 
-    if (!poly.length && !st.wallBuild) {
+    if (!drawn.length && !st.wallBuild) {
       ctx.fillStyle = '#9aa3b5';
       ctx.font = '15px system-ui, sans-serif';
       ctx.textAlign = 'center';
@@ -213,16 +233,28 @@ export default function Canvas2D() {
       return;
     }
 
-    // floor
-    ctx.beginPath();
-    poly.forEach((p, i) => (i ? ctx.lineTo(sx(p.x), sy(p.y)) : ctx.moveTo(sx(p.x), sy(p.y))));
-    if (st.room) ctx.closePath();
-    ctx.fillStyle = '#faf8f4';
-    ctx.fill();
+    // floor — every room on the plan. Uncommitted space between them stays
+    // ground, which is what makes separate rooms read as separate rooms.
+    for (const shape of drawn) {
+      ctx.beginPath();
+      shape.poly.forEach((p, i) =>
+        i ? ctx.lineTo(sx(p.x), sy(p.y)) : ctx.moveTo(sx(p.x), sy(p.y)),
+      );
+      if (st.rooms.length) ctx.closePath();
+      ctx.fillStyle = '#faf8f4';
+      ctx.fill();
+    }
 
     // grid (clipped to the floor)
-    if (st.room && st.grid) {
+    if (st.rooms.length && st.grid) {
       ctx.save();
+      ctx.beginPath();
+      for (const shape of drawn) {
+        shape.poly.forEach((p, i) =>
+          i ? ctx.lineTo(sx(p.x), sy(p.y)) : ctx.moveTo(sx(p.x), sy(p.y)),
+        );
+        ctx.closePath();
+      }
       ctx.clip();
       ctx.strokeStyle = 'rgba(70, 84, 120, 0.10)';
       ctx.lineWidth = 1;
@@ -468,15 +500,21 @@ export default function Canvas2D() {
     }
 
     // -------------------------------------------------------------- walls
-    const pts = st.room ?? st.draft ?? [];
-    const n = pts.length;
-    const closeRoom = !!st.room;
-    const edgeCount = closeRoom ? n : n - 1;
+    // Each committed room draws its own edges with its own openings; an
+    // in-progress draft draws as an open chain. Edge indices are namespaced by
+    // room id so hovering or cycling an edge can't hit the wrong room.
+    const n = drawn.length;
+    for (let si = 0; si < n; si++) {
+    const shape = drawn[si];
+    const pts = shape.poly;
+    const committed = st.rooms.length > 0;
+    const openings = committed ? (st.rooms[si]?.openings ?? []) : [];
+    const edgeCount = committed ? pts.length : pts.length - 1;
     for (let i = 0; i < edgeCount; i++) {
       const a = pts[i];
-      const b = pts[(i + 1) % n];
-      const kind: EdgeKind = closeRoom ? st.openings[i] ?? 'wall' : 'wall';
-      const hovered = hoverEdgeRef.current === i && st.edgeEdit;
+      const b = pts[(i + 1) % pts.length];
+      const kind: EdgeKind = openings[i] ?? 'wall';
+      const hovered = hoverEdgeRef.current === edgeKey(si, i) && st.edgeEdit;
       const x1 = sx(a.x);
       const y1 = sy(a.y);
       const x2 = sx(b.x);
@@ -538,6 +576,7 @@ export default function Canvas2D() {
         ctx.stroke();
       }
     }
+    }
 
     // -------------------------------------------------- built walls (🧱 tool)
     for (const w of st.walls) {
@@ -566,7 +605,9 @@ export default function Canvas2D() {
       // Preview exactly where the click would land (vertex / source-wall /
       // aligned-axis snap), so alignment with the starting wall is visible
       // before committing.
-      const target = cursor ? snapWallPoint(cursor, st.room, st.walls, chain, st.wallRef) : null;
+      const target = cursor
+        ? snapWallPoint(cursor, st.rooms.map((r) => r.poly), st.walls, chain, st.wallRef)
+        : null;
       ctx.strokeStyle = '#4f6df5';
       ctx.lineWidth = 5;
       ctx.lineJoin = 'round';
@@ -594,16 +635,18 @@ export default function Canvas2D() {
     }
 
     // vertices (always in draw mode, in edge-edit mode too)
-    if (!st.room || st.edgeEdit) {
-      pts.forEach((p, i) => {
-        ctx.beginPath();
-        ctx.arc(sx(p.x), sy(p.y), i === 0 ? 8 : 6, 0, Math.PI * 2);
-        ctx.fillStyle = i === 0 ? '#4f6df5' : '#ffffff';
-        ctx.fill();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = '#4f6df5';
-        ctx.stroke();
-      });
+    if (!st.rooms.length || st.edgeEdit) {
+      for (const shape of drawn) {
+        shape.poly.forEach((p, i) => {
+          ctx.beginPath();
+          ctx.arc(sx(p.x), sy(p.y), i === 0 ? 8 : 6, 0, Math.PI * 2);
+          ctx.fillStyle = i === 0 ? '#4f6df5' : '#ffffff';
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = '#4f6df5';
+          ctx.stroke();
+        });
+      }
     }
 
     // rubber band while drawing
@@ -632,18 +675,43 @@ export default function Canvas2D() {
       }
     }
 
-    // room label
-    if (st.room) {
-      const c = polyCentroid(st.room);
-      let area = 0;
-      for (let i = 0, j = n - 1; i < n; j = i++) {
-        area += (pts[j].x + pts[i].x) * (pts[j].y - pts[i].y);
-      }
-      area = Math.abs(area) / 2;
-      ctx.fillStyle = 'rgba(44,50,66,0.55)';
+    // room labels — each room names itself, so a multi-room plan stays readable.
+    // Labels sit just inside the top edge rather than at the centroid, which
+    // would land them on top of the furniture.
+    for (let ri = 0; ri < st.rooms.length; ri++) {
+      const r = st.rooms[ri];
+      const area = polyArea(r.poly);
+      const isActive = r.id === st.activeRoomId;
+      const top = r.poly.reduce((m, p) => Math.min(m, p.y), Infinity);
+      const mid =
+        r.poly.reduce((a, p) => a + p.x, 0) / r.poly.length;
+      const label = `${r.name.trim() || ROOM_LABEL[r.kind]} · ${area.toFixed(1)} m²`;
       ctx.font = '600 13px system-ui, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(`${area.toFixed(1)} m²`, sx(c.x), sy(c.y));
+      const tw = ctx.measureText(label).width;
+      const lx = sx(mid);
+      const ly = sy(top) + 16;
+      // A soft plate keeps the text legible over furniture and rugs.
+      ctx.fillStyle = 'rgba(255,255,255,0.82)';
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(lx - tw / 2 - 7, ly - 12, tw + 14, 19, 5);
+      else ctx.rect(lx - tw / 2 - 7, ly - 12, tw + 14, 19);
+      ctx.fill();
+      ctx.fillStyle = isActive ? 'rgba(30,36,52,0.92)' : 'rgba(60,66,82,0.6)';
+      ctx.fillText(label, lx, ly);
+      if (isActive && st.rooms.length > 1) {
+        // Ring the room being edited.
+        ctx.beginPath();
+        r.poly.forEach((p, i) =>
+          i ? ctx.lineTo(sx(p.x), sy(p.y)) : ctx.moveTo(sx(p.x), sy(p.y)),
+        );
+        ctx.closePath();
+        ctx.strokeStyle = 'rgba(79,109,245,0.55)';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([9, 7]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
     }
   }, [size]);
 
@@ -664,13 +732,13 @@ export default function Canvas2D() {
   // redraw on state changes / resize
   useEffect(() => {
     draw();
-  }, [draw, room, draft, items, selected, openings, grid, mode, edgeEdit, walls, wallBuild, wallDraft]);
+  }, [draw, rooms, activeRoomId, draft, items, selected, grid, mode, edgeEdit, walls, wallBuild, wallDraft]);
 
   // reset view when a new room appears
   useEffect(() => {
     viewRef.current = { zoom: 1, panX: 0, panY: 0 };
     draw();
-  }, [room, draw]);
+  }, [rooms, draw]);
 
   // close the context menu on any outside pointer-down
   useEffect(() => {
@@ -718,19 +786,20 @@ export default function Canvas2D() {
     return null;
   };
 
-  const hitEdge = (p: Vec2): number => {
+  /** Edge under the cursor across the whole plan, as `roomIdx:edgeIdx`, or null. */
+  const hitEdge = (p: Vec2): string | null => {
     const st = useStore.getState();
-    if (!st.room) return -1;
-    const poly = st.room;
-    let best = -1;
+    let best: string | null = null;
     let bestD = 0.22; // ~ tolerance in meters
-    for (let i = 0; i < poly.length; i++) {
-      const dd = distPointSeg(p, poly[i], poly[(i + 1) % poly.length]);
-      if (dd < bestD) {
-        bestD = dd;
-        best = i;
+    st.rooms.forEach((r, ri) => {
+      for (let i = 0; i < r.poly.length; i++) {
+        const dd = distPointSeg(p, r.poly[i], r.poly[(i + 1) % r.poly.length]);
+        if (dd < bestD) {
+          bestD = dd;
+          best = edgeKey(ri, i);
+        }
       }
-    }
+    });
     return best;
   };
 
@@ -751,7 +820,7 @@ export default function Canvas2D() {
 
   /** Nearest room corner / wall endpoint within 0.3 m, for vertex snapping. */
   const snapNearestVertex = (p: Vec2, st: ReturnType<typeof useStore.getState>): Vec2 | null => {
-    const verts: Vec2[] = [...(st.room ?? [])];
+    const verts: Vec2[] = allRoomPoints(st.rooms);
     for (const w of st.walls) verts.push(w.a, w.b);
     let best: Vec2 | null = null;
     let bestD = 0.3;
@@ -865,7 +934,7 @@ export default function Canvas2D() {
       draw();
       return;
     }
-    if (st.mode !== 'furnish' || !st.room) {
+    if (st.mode !== 'furnish' || !st.rooms.length) {
       hideCtxMenu();
       return;
     }
@@ -924,17 +993,19 @@ export default function Canvas2D() {
       return;
     }
 
-    if (st.mode === 'draw' && !st.room) {
+    if (st.mode === 'draw' && !st.rooms.length) {
       // commit on a clean tap-up so a pinch (second finger) can cancel it
       draftPendingRef.current = { p, x: e.clientX, y: e.clientY };
       draw();
       return;
     }
 
-    if (st.edgeEdit && st.room) {
-      const idx = hitEdge(p);
-      if (idx >= 0) {
-        st.cycleEdge(idx);
+    if (st.edgeEdit && st.rooms.length) {
+      const key = hitEdge(p);
+      if (key) {
+        const [ri, ei] = key.split(':').map(Number);
+        const room = st.rooms[ri];
+        if (room) st.cycleEdge(room.id, ei);
         draw();
         return;
       }
@@ -943,10 +1014,24 @@ export default function Canvas2D() {
     const hit = hitItem(p);
     if (hit) {
       st.select(hit.uid);
+      // Selecting furniture also switches to the room that piece lives in, so
+      // the room editor and nudge pad always describe what is selected.
+      if (hit.roomId && hit.roomId !== st.activeRoomId) st.setActiveRoom(hit.roomId);
       dragRef.current = { uid: hit.uid, ox: p.x - hit.x, oy: p.y - hit.y, moved: false };
       if (e.pointerType !== 'mouse') armLongPress(e.clientX, e.clientY);
       draw();
       return;
+    }
+
+    // Bare floor inside a room selects that room — with several rooms on the
+    // plan, clicking one should make it the one being furnished.
+    if (st.rooms.length > 1) {
+      const under = st.rooms.find((r) => pointInPoly(p, r.poly));
+      if (under && under.id !== st.activeRoomId) {
+        st.setActiveRoom(under.id);
+        draw();
+        return;
+      }
     }
 
     // empty space: pan on drag, deselect on clean click
@@ -994,8 +1079,8 @@ export default function Canvas2D() {
       return;
     }
 
-    if (st.mode === 'draw' && !st.room) {
-      hoverEdgeRef.current = -1;
+    if (st.mode === 'draw' && !st.rooms.length) {
+      hoverEdgeRef.current = null;
       draw();
       return;
     }
@@ -1019,7 +1104,7 @@ export default function Canvas2D() {
 
     // hover feedback for edge editing
     const prev = hoverEdgeRef.current;
-    hoverEdgeRef.current = st.edgeEdit && st.room ? hitEdge(p) : -1;
+    hoverEdgeRef.current = st.edgeEdit && st.rooms.length ? hitEdge(p) : null;
     if (prev !== hoverEdgeRef.current) draw();
   };
 
@@ -1050,7 +1135,7 @@ export default function Canvas2D() {
     // ✏️ draw mode: place the corner on a clean tap (no drag / pinch happened)
     const dp = draftPendingRef.current;
     draftPendingRef.current = null;
-    if (dp && st.mode === 'draw' && !st.room) {
+    if (dp && st.mode === 'draw' && !st.rooms.length) {
       st.addDraftPoint(dp.p);
       draw();
     }
@@ -1068,7 +1153,7 @@ export default function Canvas2D() {
 
   const onWheel = (e: React.WheelEvent) => {
     const st = useStore.getState();
-    if (!st.room && !st.draft && !st.wallBuild) return;
+    if (!st.rooms.length && !st.draft && !st.wallBuild) return;
     e.preventDefault();
     const cv = canvas2DRef.current!;
     const r = cv.getBoundingClientRect();
@@ -1118,7 +1203,7 @@ export default function Canvas2D() {
   const st = useStore();
   const cursorStyle = st.wallBuild
     ? 'crosshair'
-    : st.mode === 'draw' && !st.room
+    : st.mode === 'draw' && !st.rooms.length
       ? 'crosshair'
       : dragRef.current
         ? 'grabbing'
@@ -1176,8 +1261,11 @@ export default function Canvas2D() {
           🧱 Click the ground to lay walls — they align to the wall you start from · <b>click a wall</b> to remove it · <b>Esc</b>/right-click finishes the chain
         </div>
       )}
-      {st.mode === 'draw' && st.room && !st.edgeEdit && !st.wallBuild && (
-        <div className="canvas-hint">✅ Room closed — use <b>Furnish</b> or edit walls with <b>Edit openings</b></div>
+      {st.mode === 'draw' && st.rooms.length && !st.edgeEdit && !st.wallBuild && (
+        <div className="canvas-hint">
+          ✅ {st.rooms.length} room{st.rooms.length > 1 ? 's' : ''} — use <b>Furnish</b> or edit
+          walls with <b>Edit openings</b>. Close another wall loop to add a room.
+        </div>
       )}
       {st.edgeEdit && (
         <div className="canvas-hint accent">

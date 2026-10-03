@@ -1,19 +1,62 @@
 // Right panel: selection details, room stats & quick actions.
 
+import { useMemo } from 'react';
 import { ITEM_INDEX } from '../data/items';
-import { selectArea, useStore } from '../store';
-import { ROOM_LABEL } from '../logic/placement';
+import { selectActiveRoom, useStore } from '../store';
+import { polyArea } from '../logic/geometry';
+import { ROOM_KIND_ORDER, ROOM_LABEL, roomTitle } from '../logic/placement';
 import { MOUNT_LABEL, TYPE_LABEL } from '../types';
+import type { RoomKind } from '../types';
 import ItemThumb from './ItemThumb';
+
+/**
+ * Name the active room and pick what it is used for. The type is not just a
+ * label — it selects the object list AI Fill places, so this is the control
+ * that makes the fill match the space.
+ */
+function RoomEditor() {
+  const room = useStore(selectActiveRoom);
+  const setRoomKind = useStore((s) => s.setRoomKind);
+  const setRoomName = useStore((s) => s.setRoomName);
+  if (!room) return null;
+  return (
+    <div className="room-editor">
+      <label className="room-field">
+        <span>Name</span>
+        <input
+          type="text"
+          value={room.name}
+          maxLength={40}
+          placeholder={ROOM_LABEL[room.kind]}
+          onChange={(e) => setRoomName(e.target.value)}
+        />
+      </label>
+      <label className="room-field">
+        <span>Used for</span>
+        <select value={room.kind} onChange={(e) => setRoomKind(e.target.value as RoomKind)}>
+          {ROOM_KIND_ORDER.map((k) => (
+            <option key={k} value={k}>
+              {ROOM_LABEL[k]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="muted tiny">
+        AI Fill uses this to choose the objects — it furnishes a {ROOM_LABEL[room.kind].toLowerCase()}{' '}
+        differently from any other room type.
+      </p>
+    </div>
+  );
+}
 
 export default function DetailPanel() {
   const selected = useStore((s) => s.selected);
-  const items = useStore((s) => s.items);
+  const allItems = useStore((s) => s.items);
   const tier = useStore((s) => s.tier);
-  const area = useStore(selectArea);
-  const roomKind = useStore((s) => s.roomKind);
-  const room = useStore((s) => s.room);
-  const openings = useStore((s) => s.openings);
+  const room = useStore(selectActiveRoom);
+  const rooms = useStore((s) => s.rooms);
+  const setActiveRoom = useStore((s) => s.setActiveRoom);
+  const removeRoom = useStore((s) => s.removeRoom);
   const edgeEdit = useStore((s) => s.edgeEdit);
 
   const rotateSelected = useStore((s) => s.rotateSelected);
@@ -24,6 +67,14 @@ export default function DetailPanel() {
   const select = useStore((s) => s.select);
   const tryMoveFine = useStore((s) => s.tryMoveFine);
 
+  // Only the active room's items are counted and "select first" navigates
+  // within it, so the stats describe the room you're actually looking at.
+  const items = useMemo(
+    () => (room ? allItems.filter((i) => i.roomId === room.id) : []),
+    [allItems, room],
+  );
+  const area = useMemo(() => (room ? polyArea(room.poly) : 0), [room]);
+
   const placed = items.find((i) => i.uid === selected);
   const item = placed ? ITEM_INDEX.get(placed.itemId) : null;
 
@@ -32,6 +83,7 @@ export default function DetailPanel() {
     if (placed) tryMoveFine(placed.uid, placed.x + dx, placed.y + dy);
   };
 
+  const openings = room?.openings ?? [];
   const windowCount = openings.filter((o) => o === 'window').length;
   const doorCount = openings.filter((o) => o === 'door').length;
 
@@ -142,9 +194,28 @@ export default function DetailPanel() {
         </div>
       ) : (
         <div className="detail-card">
-          <h3>{room ? ROOM_LABEL[roomKind] : 'No room yet'}</h3>
+          <h3>{room ? roomTitle(room) : 'No room yet'}</h3>
           {room ? (
             <>
+              {/* Room list + rename. Labelling the room is what tells AI Fill
+                  which objects the space needs. */}
+              {rooms.length > 1 && (
+                <div className="room-switch" role="tablist" aria-label="Rooms">
+                  {rooms.map((r) => (
+                    <button
+                      key={r.id}
+                      role="tab"
+                      aria-selected={r.id === room.id}
+                      className={`room-chip ${r.id === room.id ? 'active' : ''}`}
+                      onClick={() => setActiveRoom(r.id)}
+                      title={`${ROOM_LABEL[r.kind]} — ${polyArea(r.poly).toFixed(1)} m²`}
+                    >
+                      {r.name.trim() || ROOM_LABEL[r.kind]}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <RoomEditor />
               <dl className="specs">
                 <div>
                   <dt>Area</dt>
@@ -167,6 +238,11 @@ export default function DetailPanel() {
               <button className="btn ghost wide" onClick={() => select(items[0]?.uid ?? null)}>
                 {items.length ? `Select first item (${items.length} placed)` : 'Nothing placed yet'}
               </button>
+              {rooms.length > 1 && (
+                <button className="btn danger wide" onClick={() => removeRoom(room.id)}>
+                  🗑 Delete this room
+                </button>
+              )}
             </>
           ) : (
             <p className="muted">

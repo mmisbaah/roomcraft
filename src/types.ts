@@ -41,7 +41,30 @@ export type EdgeKind = 'wall' | 'window' | 'door';
 
 export type ViewMode = 'draw' | 'furnish' | '3d';
 
-export type RoomKind = 'living' | 'bedroom' | 'office' | 'bathroom';
+/**
+ * What a room is used for. The kind drives which objects AI Fill chooses, so
+ * the list is deliberately made of things you can actually furnish distinctly
+ * rather than a generic catch-all.
+ */
+export type RoomKind =
+  | 'living'
+  | 'dining'
+  | 'kitchen'
+  | 'bedroom'
+  | 'kids'
+  | 'nursery'
+  | 'office'
+  | 'study'
+  | 'library'
+  | 'guest'
+  | 'bathroom'
+  | 'laundry'
+  | 'entryway'
+  | 'hallway'
+  | 'gym'
+  | 'sunroom'
+  | 'pantry'
+  | 'closet';
 
 export interface Vec2 {
   x: number;
@@ -83,10 +106,29 @@ export interface BuiltWall {
   kind: EdgeKind;
 }
 
+/**
+ * One enclosed space on the plan. A plan holds any number of rooms; each keeps
+ * its own outline, openings, purpose (`kind`) and display name, so AI Fill can
+ * furnish a bedroom and a bathroom differently on the same floorplan.
+ */
+export interface Room {
+  id: string;
+  /** Outline in world meters, counter-clockwise or clockwise — both are fine. */
+  poly: Vec2[];
+  /** One entry per edge of `poly`: 'wall' | 'window' | 'door'. */
+  openings: EdgeKind[];
+  /** Purpose, which selects the AI Fill preset. */
+  kind: RoomKind;
+  /** Custom label shown in the UI; falls back to the kind's label when blank. */
+  name: string;
+}
+
 /** An item dropped into the room. */
 export interface PlacedItem {
   uid: string;
   itemId: string;
+  /** The room this item belongs to — decides which outline it must stay inside. */
+  roomId: string;
   /** Center of the footprint in world meters (same coords as 2D). */
   x: number;
   y: number;

@@ -1581,6 +1581,11 @@ export interface PresetStep {
   count?: number;
 }
 
+/**
+ * What AI Fill puts in each kind of room, in placement order. Order matters:
+ * the big anchoring pieces go down first so the smaller ones fit around them,
+ * and `kind` only narrows the pool when the library actually has a match.
+ */
 export const PRESETS: Record<RoomKind, PresetStep[]> = {
   living: [
     { type: 'textiles', kind: 'arearug' },
@@ -1623,11 +1628,172 @@ export const PRESETS: Record<RoomKind, PresetStep[]> = {
     { type: 'floorplants', kind: 'fern' }, // humidity lovers
     { type: 'succulents' }, // on the vanity counter (surface mount)
   ],
+  dining: [
+    { type: 'tables', kind: 'dining' }, // anchors the room; chairs ring it
+    { type: 'seating', kind: 'dining', count: 4 },
+    { type: 'ceilight', kind: 'pendant', count: 2 }, // low over the table
+    { type: 'tabletop', kind: 'vase' },
+    { type: 'tabletop', kind: 'candle' },
+    { type: 'walldecor', kind: 'artwork' },
+    { type: 'floorplants', kind: 'ficus' },
+  ],
+  kitchen: [
+    { type: 'tables', kind: 'table' },
+    { type: 'seating', kind: 'dining', count: 2 },
+    { type: 'storage', kind: 'sideboard' },
+    { type: 'functional', kind: 'media' }, // the appliance run
+    { type: 'ceilight', kind: 'flush' },
+    { type: 'tabletop', kind: 'bowl' },
+    { type: 'tabletop', kind: 'vase' },
+  ],
+  kids: [
+    { type: 'beds' },
+    { type: 'textiles', kind: 'arearug' },
+    { type: 'seating', kind: 'floorcushion', count: 2 },
+    { type: 'tables', kind: 'coffee' },
+    { type: 'storage', kind: 'shelf' },
+    { type: 'ceilight', kind: 'flush' },
+    { type: 'walldecor', kind: 'artwork' },
+    { type: 'functional', kind: 'basket', count: 2 }, // toy storage
+  ],
+  nursery: [
+    { type: 'beds' }, // cot / daybed
+    { type: 'textiles', kind: 'arearug' },
+    { type: 'seating', kind: 'accent' }, // feeding chair
+    { type: 'storage', kind: 'chest' },
+    { type: 'ceilight', kind: 'flush' }, // dimmable, no glare
+    { type: 'walldecor', kind: 'artwork' },
+    { type: 'functional', kind: 'basket' },
+    { type: 'walllight', kind: 'shade' },
+  ],
+  study: [
+    { type: 'tables', kind: 'desk' },
+    { type: 'seating', kind: 'dining' },
+    { type: 'storage', kind: 'bookcase' },
+    { type: 'textiles', kind: 'arearug' },
+    { type: 'ceilight', kind: 'flush' },
+    { type: 'walldecor', kind: 'picture' },
+    { type: 'floorlamp', kind: 'desk' }, // R118/R148 — task light on the desk
+  ],
+  library: [
+    { type: 'storage', kind: 'bookcase', count: 2 },
+    { type: 'seating', kind: 'accent', count: 2 },
+    { type: 'tables', kind: 'coffee' },
+    { type: 'textiles', kind: 'arearug' },
+    { type: 'floorlamp', kind: 'floor' },
+    { type: 'walldecor', kind: 'artwork' },
+    { type: 'tabletop', kind: 'books' },
+  ],
+  guest: [
+    { type: 'beds' },
+    { type: 'storage', kind: 'nightstand' },
+    { type: 'textiles', kind: 'runner' },
+    { type: 'ceilight', kind: 'flush' },
+    { type: 'walldecor', kind: 'artwork' },
+    { type: 'floorlamp', kind: 'table' },
+    { type: 'tabletop', kind: 'vase' },
+  ],
+  laundry: [
+    { type: 'storage', kind: 'cabinet' }, // the appliance run
+    { type: 'tables', kind: 'table' }, // folding surface
+    { type: 'functional', kind: 'basket', count: 2 }, // hampers
+    { type: 'storage', kind: 'shelf' },
+    { type: 'ceilight', kind: 'flush' },
+    { type: 'hangingplants', kind: 'pothos' },
+  ],
+  entryway: [
+    { type: 'storage', kind: 'cabinet' }, // console table
+    { type: 'hangingplants', kind: 'ivy' },
+    { type: 'functional', kind: 'basket' },
+    { type: 'ceilight', kind: 'flush' },
+    { type: 'walldecor', kind: 'mirror' },
+    { type: 'tabletop', kind: 'bowl' },
+    { type: 'tabletop', kind: 'vase' },
+  ],
+  hallway: [
+    // Nothing bulky: a corridor has to stay walkable end to end.
+    { type: 'walldecor', kind: 'artwork', count: 2 },
+    { type: 'walllight', kind: 'sconce' },
+    { type: 'ceilight', kind: 'flush', count: 2 },
+    { type: 'functional', kind: 'basket' },
+    { type: 'tabletop', kind: 'vase' },
+  ],
+  gym: [
+    { type: 'textiles', kind: 'arearug' },
+    { type: 'functional', kind: 'media' }, // equipment mass
+    { type: 'storage', kind: 'shelf' },
+    { type: 'seating', kind: 'bench' },
+    { type: 'ceilight', kind: 'flush', count: 2 },
+    { type: 'walllight' },
+  ],
+  sunroom: [
+    { type: 'seating', kind: 'loveseat' },
+    { type: 'seating', kind: 'accent', count: 2 },
+    { type: 'tables', kind: 'coffee' },
+    { type: 'textiles', kind: 'arearug' },
+    { type: 'floorplants', kind: 'palm', count: 2 }, // light-hungry
+    { type: 'ceilight', kind: 'pendant' },
+  ],
+  pantry: [
+    { type: 'storage', kind: 'shelving', count: 2 },
+    { type: 'storage', kind: 'cabinet' },
+    { type: 'functional', kind: 'basket', count: 2 },
+    { type: 'tabletop', kind: 'bowl' },
+    { type: 'ceilight', kind: 'flush' },
+  ],
+  closet: [
+    { type: 'storage', kind: 'shelving', count: 2 },
+    { type: 'storage', kind: 'cabinet' },
+    { type: 'functional', kind: 'basket', count: 2 },
+    { type: 'tabletop', kind: 'box' },
+    { type: 'ceilight', kind: 'flush' },
+  ],
 };
 
 export const ROOM_LABEL: Record<RoomKind, string> = {
   living: 'Living room',
+  dining: 'Dining room',
+  kitchen: 'Kitchen',
   bedroom: 'Bedroom',
+  kids: "Kids' room",
+  nursery: 'Nursery',
   office: 'Home office',
+  study: 'Study',
+  library: 'Library',
+  guest: 'Guest room',
   bathroom: 'Bathroom',
+  laundry: 'Laundry room',
+  entryway: 'Entryway',
+  hallway: 'Hallway',
+  gym: 'Home gym',
+  sunroom: 'Sunroom',
+  pantry: 'Pantry',
+  closet: 'Walk-in closet',
 };
+
+/** Order the room-type picker is presented in. */
+export const ROOM_KIND_ORDER: RoomKind[] = [
+  'living',
+  'dining',
+  'kitchen',
+  'bedroom',
+  'kids',
+  'nursery',
+  'office',
+  'study',
+  'library',
+  'guest',
+  'bathroom',
+  'laundry',
+  'entryway',
+  'hallway',
+  'gym',
+  'sunroom',
+  'pantry',
+  'closet',
+];
+
+/** Display name for a room: its custom label if set, else the kind's label. */
+export function roomTitle(r: { kind: RoomKind; name: string }): string {
+  return r.name.trim() || ROOM_LABEL[r.kind];
+}

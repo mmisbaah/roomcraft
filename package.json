@@ -8,7 +8,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.check.json --noEmit",
+    "test:placement": "esbuild test-canplaceraw.ts --bundle --platform=node --format=cjs --outfile=test-canplacerow.cjs --log-level=error && node test-canplacerow.cjs",
+    "test:walls": "esbuild test-wallsnap.ts --bundle --platform=node --format=cjs --outfile=test-wallsnap.cjs --log-level=error && node test-wallsnap.cjs",
     "preview": "vite preview",
     "electron:dev": "concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "electron:build": "vite build && electron-builder",

@@ -15,17 +15,30 @@ export interface Grid {
   free: Uint8Array;
 }
 
-/** Build a grid whose cells lie completely inside the polygon. */
-export function buildGrid(poly: Vec2[], cell = CELL): Grid {
+/**
+ * Build one grid spanning every room outline, where a cell is usable when it
+ * lies completely inside *any* of them. Rooms on a plan are separate spaces, so
+ * the floor between them stays blocked; sharing a single grid still lets the
+ * rest of the app treat the whole plan as one occupancy map, which is what
+ * keeps furniture in different rooms from colliding.
+ */
+export function buildGridFor(polys: Vec2[][], cell = CELL): Grid {
+  const shapes = polys.filter((p) => p.length >= 3);
   let minx = Infinity;
   let miny = Infinity;
   let maxx = -Infinity;
   let maxy = -Infinity;
-  for (const p of poly) {
-    if (p.x < minx) minx = p.x;
-    if (p.y < miny) miny = p.y;
-    if (p.x > maxx) maxx = p.x;
-    if (p.y > maxy) maxy = p.y;
+  for (const poly of shapes) {
+    for (const p of poly) {
+      if (p.x < minx) minx = p.x;
+      if (p.y < miny) miny = p.y;
+      if (p.x > maxx) maxx = p.x;
+      if (p.y > maxy) maxy = p.y;
+    }
+  }
+  if (!shapes.length || !isFinite(minx)) {
+    // No rooms yet: a degenerate 1x1 all-blocked grid keeps callers total.
+    return { ox: 0, oy: 0, cols: 1, rows: 1, cell, free: new Uint8Array(1) };
   }
   const cols = Math.max(1, Math.ceil((maxx - minx) / cell - 1e-9));
   const rows = Math.max(1, Math.ceil((maxy - miny) / cell - 1e-9));
@@ -35,38 +48,49 @@ export function buildGrid(poly: Vec2[], cell = CELL): Grid {
     for (let i = 0; i < cols; i++) {
       const x0 = minx + i * cell;
       const y0 = miny + j * cell;
-      const x1 = x0 + cell;
-      const y1 = y0 + cell;
       const corners: Vec2[] = [
         { x: x0, y: y0 },
-        { x: x1, y: y0 },
-        { x: x1, y: y1 },
-        { x: x0, y: y1 },
+        { x: x0 + cell, y: y0 },
+        { x: x0 + cell, y: y0 + cell },
+        { x: x0, y: y0 + cell },
       ];
-      // Every corner must be inside the room...
-      let ok = true;
-      for (const c of corners) {
-        if (!pointInPoly(c, poly)) {
-          ok = false;
-          break;
+      // The cell is usable when one room fully contains it and no room's
+      // outline cuts through it.
+      let ok = false;
+      for (const poly of shapes) {
+        if (!pointInPoly(corners[0], poly)) continue;
+        let inside = true;
+        for (const c of corners) {
+          if (!pointInPoly(c, poly)) {
+            inside = false;
+            break;
+          }
         }
-      }
-      // ...and no wall may cut through the cell.
-      if (ok) {
+        if (!inside) continue;
+        let crossed = false;
         for (let e = 0, k = poly.length - 1; e < poly.length; k = e++) {
           for (let m = 0; m < 4; m++) {
             if (segsCross(poly[k], poly[e], corners[m], corners[(m + 1) % 4])) {
-              ok = false;
+              crossed = true;
               break;
             }
           }
-          if (!ok) break;
+          if (crossed) break;
+        }
+        if (!crossed) {
+          ok = true;
+          break;
         }
       }
       free[i + j * cols] = ok ? 1 : 0;
     }
   }
   return { ox: minx, oy: miny, cols, rows, cell, free };
+}
+
+/** Single-room convenience wrapper around {@link buildGridFor}. */
+export function buildGrid(poly: Vec2[], cell = CELL): Grid {
+  return buildGridFor([poly], cell);
 }
 
 export function cellCenter(g: Grid, i: number, j: number): Vec2 {

@@ -411,6 +411,77 @@ kbd {
   );
 }
 
+/* Room label + purpose editor in the detail panel. */
+.room-editor {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 12px;
+  padding: 10px;
+  border: 1px solid var(--line, #e3e7ee);
+  border-radius: 9px;
+  background: #fbfcfe;
+}
+
+.room-field {
+  display: grid;
+  gap: 3px;
+}
+
+.room-field > span {
+  font-size: 11px;
+  font-weight: 650;
+  color: #6b7285;
+  letter-spacing: 0.01em;
+}
+
+.room-field input,
+.room-field select {
+  width: 100%;
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  background: #fff;
+  border: 1px solid #d6dbe4;
+  border-radius: 6px;
+}
+
+.room-field input:focus,
+.room-field select:focus {
+  outline: 2px solid #4f6df5;
+  outline-offset: -1px;
+}
+
+/* Room switcher, shown once a plan has more than one room. */
+.room-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 10px 0 2px;
+}
+
+.room-chip {
+  padding: 5px 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4b5563;
+  background: #fff;
+  border: 1px solid #d6dbe4;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.room-chip:hover {
+  border-color: #9aa4b8;
+}
+
+.room-chip.active {
+  color: #fff;
+  background: #4f6df5;
+  border-color: #4f6df5;
+}
+
 .item-name {
   font-size: 12px;
   font-weight: 650;

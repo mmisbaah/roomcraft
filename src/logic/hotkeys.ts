@@ -1,7 +1,7 @@
 // Keyboard movement / rotation / deletion for the selected object.
 // Shared by the 2D canvas and the 3D scene so the same shortcuts work in both modes.
 
-import { useStore, edgesOf } from '../store';
+import { useStore, edgesOf, selectActiveRoom } from '../store';
 import { distPointSeg } from './geometry';
 import { ITEM_INDEX } from '../data/items';
 
@@ -91,8 +91,9 @@ export function objectHotkey(e: KeyboardEvent, dirMap?: Record<string, DirProvid
   // project the nudge onto the wall tangent so ALL arrows slide the item
   // along the wall. This makes arrow keys useful on all walls.
   const itemDef = ITEM_INDEX.get(it.itemId);
-  if (itemDef && itemDef.mount === 'wall' && st.room) {
-    const edges = edgesOf(st.room, st.openings, st.walls);
+  const room = st.rooms.find((r) => r.id === it.roomId) ?? selectActiveRoom(st);
+  if (itemDef && itemDef.mount === 'wall' && room) {
+    const edges = edgesOf(room.poly, room.openings, st.walls);
     // Find the wall this item is attached to (nearest non-door edge)
     let bestEdge: { a: { x: number; y: number }; b: { x: number; y: number }; kind: string } | null = null;
     let bestD = Infinity;

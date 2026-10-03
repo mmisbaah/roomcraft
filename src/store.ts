@@ -2,8 +2,24 @@
 
 import { create } from 'zustand';
 import { ITEM_INDEX, LIBRARY } from './data/items';
-import { distPointSeg, polyArea, polyCentroid, rotatedSize } from './logic/geometry';
-import { blockWall, buildGrid, CELL, type Grid } from './logic/grid';
+import {
+  cleanPolygon,
+  distPointSeg,
+  pointInPoly,
+  polyArea,
+  polyCentroid,
+  polysOverlap,
+  rotatedSize,
+} from './logic/geometry';
+import { blockWall, buildGridFor, CELL, type Grid } from './logic/grid';
+import {
+  CLOSE_RADIUS,
+  dist2,
+  snapWallPoint,
+  startWallPoint,
+  suggestOpenings,
+  wallSegments,
+} from './logic/wallsnap';
 import {
   canPlace,
   canPlaceManual,
@@ -22,6 +38,7 @@ import type {
   EdgeKind,
   FurnItem,
   PlacedItem,
+  Room,
   RoomKind,
   Tier,
   Vec2,
@@ -40,12 +57,14 @@ const nextWallId = () => `w${++wallSeq}-${Date.now().toString(36)}`;
  * block a 36 in (0.91 m) approach zone — the door swing plus the entry path
  * (rules 1, 2, 17, 126) — so nothing can be dropped in front of a door.
  */
-function makeGrid(room: Vec2[], walls: BuiltWall[], openings: EdgeKind[] = []): Grid {
-  const g = buildGrid(room);
+function makeGrid(rooms: Room[], walls: BuiltWall[]): Grid {
+  const g = buildGridFor(rooms.map((r) => r.poly));
   for (const w of walls) blockWall(g, w.a, w.b);
-  for (let i = 0; i < room.length; i++) {
-    if ((openings[i] ?? 'wall') === 'door') {
-      blockWall(g, room[i], room[(i + 1) % room.length], CLEARANCE.doorApproach);
+  for (const r of rooms) {
+    for (let i = 0; i < r.poly.length; i++) {
+      if ((r.openings[i] ?? 'wall') === 'door') {
+        blockWall(g, r.poly[i], r.poly[(i + 1) % r.poly.length], CLEARANCE.doorApproach);
+      }
     }
   }
   for (const w of walls) {
@@ -61,25 +80,11 @@ export function edgesOf(poly: Vec2[], openings: EdgeKind[], walls: BuiltWall[] =
 }
 
 /** Suggest one window (longest edge) and one door (shortest edge). */
-function suggestOpenings(poly: Vec2[]): EdgeKind[] {
-  const n = poly.length;
-  const lens = poly.map((a, i) => {
-    const b = poly[(i + 1) % n];
-    return Math.hypot(b.x - a.x, b.y - a.y);
-  });
-  const openings: EdgeKind[] = new Array(n).fill('wall');
-  let longest = 0;
-  let shortest = 0;
-  lens.forEach((l, i) => {
-    if (l > lens[longest]) longest = i;
-    if (l < lens[shortest]) shortest = i;
-  });
-  openings[longest] = 'window';
-  openings[shortest] = 'door';
-  return openings;
-}
-
-interface Project {
+/**
+ * Saved-project format. v1 stored a single `room`; v2 stores every room on the
+ * plan. Loading accepts both so projects saved by earlier builds still open.
+ */
+interface ProjectV1 {
   room: Vec2[];
   openings: EdgeKind[];
   items: PlacedItem[];
@@ -87,31 +92,57 @@ interface Project {
   walls: BuiltWall[];
 }
 
-const DEMO_ROOM: Project = {
-  room: [
-    { x: 0, y: 0 },
-    { x: 5.6, y: 0 },
-    { x: 5.6, y: 4.2 },
-    { x: 2.2, y: 4.2 },
-    { x: 2.2, y: 5.4 },
-    { x: 0, y: 5.4 },
-  ],
-  openings: ['window', 'wall', 'wall', 'door', 'wall', 'wall'],
-  items: [],
-  roomKind: 'living',
-  walls: [],
-};
+interface ProjectV2 {
+  rooms: Room[];
+  items: PlacedItem[];
+  walls: BuiltWall[];
+  activeRoomId: string | null;
+}
+
+type Project = ProjectV1 | ProjectV2;
+
+const DEMO_ROOMS: Room[] = [
+  {
+    id: 'demo-living',
+    poly: [
+      { x: 0, y: 0 },
+      { x: 5.6, y: 0 },
+      { x: 5.6, y: 4.2 },
+      { x: 2.2, y: 4.2 },
+      { x: 2.2, y: 5.4 },
+      { x: 0, y: 5.4 },
+    ],
+    openings: ['window', 'wall', 'wall', 'door', 'wall', 'wall'],
+    kind: 'living',
+    name: '',
+  },
+  {
+    id: 'demo-kitchen',
+    poly: [
+      { x: 6.4, y: 0 },
+      { x: 10.6, y: 0 },
+      { x: 10.6, y: 3.8 },
+      { x: 6.4, y: 3.8 },
+    ],
+    openings: ['window', 'wall', 'window', 'door'],
+    kind: 'kitchen',
+    name: '',
+  },
+];
+
+const DEMO_WALLS: BuiltWall[] = [];
 
 export interface AppState {
   tier: Tier;
   mode: ViewMode;
   draft: Vec2[] | null; // polygon currently being drawn
-  room: Vec2[] | null;
-  openings: EdgeKind[];
+  /** Every enclosed space on the plan. */
+  rooms: Room[];
+  /** The room being edited / furnished; new items land here. */
+  activeRoomId: string | null;
   grid: Grid | null;
   items: PlacedItem[];
   selected: string | null;
-  roomKind: RoomKind;
   edgeEdit: boolean;
   /** Free-built partitions (🧱 tool), independent of the room outline. */
   walls: BuiltWall[];
@@ -133,7 +164,13 @@ export interface AppState {
   toastMsg: (m: string) => void;
   setMode: (m: ViewMode) => void;
   setTier: (t: Tier) => void;
+  setActiveRoom: (id: string) => void;
   setRoomKind: (k: RoomKind) => void;
+  setRoomName: (n: string) => void;
+  /** Add a room from a closed outline and make it active. */
+  addRoom: (poly: Vec2[], openings?: EdgeKind[]) => boolean;
+  /** Delete a room along with everything inside it. */
+  removeRoom: (id: string) => void;
   setEdgeEdit: (v: boolean) => void;
   setWallBuild: (v: boolean) => void;
   addWallPoint: (p: Vec2) => void;
@@ -156,7 +193,8 @@ export interface AppState {
   duplicateSelected: () => void;
   removeSelected: () => void;
   setColorIdx: (uid: string, idx: number) => void;
-  cycleEdge: (idx: number) => void;
+  cycleEdge: (roomId: string, idx: number) => void;
+  cycleWallEdge: (id: string) => void;
 
   aiFill: () => void;
   clearItems: () => void;
@@ -176,201 +214,119 @@ function toast(get: () => AppState, set: (s: Partial<AppState>) => void, m: stri
   }, 2800);
 }
 
-/** Squared distance between two points. */
-function dist2(a: Vec2, b: Vec2): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return dx * dx + dy * dy;
+let roomSeq = 0;
+const nextRoomId = () => `r${++roomSeq}-${Date.now().toString(36)}`;
+
+/** The room being edited. Falls back to the first room so callers stay total. */
+function activeRoom(s: AppState): Room | null {
+  return s.rooms.find((r) => r.id === s.activeRoomId) ?? s.rooms[0] ?? null;
 }
 
-/** Every wall line: room outline edges + built partitions. */
-function wallSegments(room: Vec2[] | null, walls: BuiltWall[]): { a: Vec2; b: Vec2 }[] {
-  const segs: { a: Vec2; b: Vec2 }[] = [];
-  if (room) {
-    for (let i = 0; i < room.length; i++) segs.push({ a: room[i], b: room[(i + 1) % room.length] });
-  }
-  for (const w of walls) segs.push({ a: w.a, b: w.b });
-  return segs;
+/** The room an item belongs to — its own room, else the active one. */
+function roomOfItem(s: AppState, it: PlacedItem): Room | null {
+  return s.rooms.find((r) => r.id === it.roomId) ?? activeRoom(s);
 }
 
-/** Nearest vertex of `verts` to p within maxD, or null. */
-function nearestVert(p: Vec2, verts: Vec2[], maxD: number): Vec2 | null {
-  let best: Vec2 | null = null;
-  let bd = maxD;
-  for (const v of verts) {
-    const d = Math.hypot(v.x - p.x, v.y - p.y);
-    if (d < bd) {
-      bd = d;
-      best = v;
-    }
-  }
-  return best;
+/** Every room outline, for snapping, hit-testing and drawing. */
+function roomPolys(s: AppState): Vec2[][] {
+  return s.rooms.map((r) => r.poly);
 }
 
-/** The point on segment a→b closest to p (clamped to the segment). */
-function projectOnSeg(p: Vec2, a: Vec2, b: Vec2): Vec2 {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const l2 = dx * dx + dy * dy;
-  if (l2 < 1e-12) return { x: a.x, y: a.y };
-  let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2;
-  t = Math.max(0, Math.min(1, t));
-  return { x: a.x + dx * t, y: a.y + dy * t };
+/** Rooms containing a point — normally exactly one. */
+function roomsAt(s: AppState, p: Vec2): Room[] {
+  return s.rooms.filter((r) => pointInPoly(p, r.poly));
 }
 
-/** Wall segment whose line passes closest to p (within maxD), or null. */
-function nearestWallLine(
-  p: Vec2,
-  segs: { a: Vec2; b: Vec2 }[],
-  maxD: number,
-): { a: Vec2; b: Vec2 } | null {
-  let best: { a: Vec2; b: Vec2 } | null = null;
-  let bd = maxD;
-  for (const s of segs) {
-    const d = distPointSeg(p, s.a, s.b);
-    if (d < bd) {
-      bd = d;
-      best = s;
-    }
-  }
-  return best;
-}
-
-/** Intersection of the ray A + t·dir (t > 0.1) with segment c→e, or null. */
-function raySegHit(A: Vec2, dir: Vec2, c: Vec2, e: Vec2): Vec2 | null {
-  const sx = e.x - c.x;
-  const sy = e.y - c.y;
-  const denom = dir.x * sy - dir.y * sx;
-  if (Math.abs(denom) < 1e-9) return null; // parallel / colinear
-  const rx = c.x - A.x;
-  const ry = c.y - A.y;
-  const t = (rx * sy - ry * sx) / denom;
-  const u = (rx * dir.y - ry * dir.x) / denom;
-  if (t <= 0.1 || u < 0 || u > 1) return null;
-  return { x: A.x + dir.x * t, y: A.y + dir.y * t };
-}
+/** How a piece is being moved: coarse AI grid, 0.1 m keyboard step, or a drag. */
+type MoveMode = 'snap' | 'fine' | 'raw';
 
 /**
- * Where the aligned ray from `anchor` crosses a wall within maxD of the click
- * p — landing exactly on that wall (a clean T-junction) instead of near it.
+ * Shared body of the three movement actions.
+ *
+ * The room an item belongs to decides which walls it has to stay inside, and a
+ * manual move re-derives that from where it is being dropped — so furniture can
+ * be dragged from the living room into the kitchen, and it then belongs to that
+ * room for AI Fill, rotation and wall anchoring. `fine` and `raw` are manual, so
+ * they skip the door-approach clearance; `snap` keeps it because it is the
+ * layout rule the AI designs to.
  */
-function rayWallHit(
-  anchor: Vec2,
-  dir: Vec2,
-  room: Vec2[] | null,
-  walls: BuiltWall[],
-  p: Vec2,
-  maxD: number,
-): Vec2 | null {
-  let best: Vec2 | null = null;
-  let bd = maxD;
-  for (const s of wallSegments(room, walls)) {
-    const q = raySegHit(anchor, dir, s.a, s.b);
-    if (!q) continue;
-    const d = Math.hypot(q.x - p.x, q.y - p.y);
-    if (d < bd) {
-      bd = d;
-      best = q;
-    }
+function moveItem(
+  st: AppState,
+  set: (s: Partial<AppState>) => void,
+  uid: string,
+  x: number,
+  y: number,
+  mode: MoveMode,
+): boolean {
+  if (!st.grid) return false;
+  const target = st.items.find((i) => i.uid === uid);
+  if (!target) return false;
+  const item = ITEM_INDEX.get(target.itemId);
+  if (!item) return false;
+
+  const own = roomOfItem(st, target);
+  if (!own) return false;
+
+  // Wall pieces stay anchored to the room they were placed in; free-standing
+  // pieces adopt whichever room contains the drop point.
+  const dest = item.mount === 'wall' ? own : roomsAt(st, { x, y })[0] ?? own;
+  const edges = edgesOf(dest.poly, dest.openings, st.walls);
+
+  if (item.mount === 'wall') {
+    const spot = projectToWall(own.poly, edges, item, x, y);
+    if (!spot) return false;
+    if (!canPlace(st.grid, own.poly, st.items, ITEM_INDEX, item, spot.x, spot.y, spot.rot, uid))
+      return false;
+    set({
+      items: st.items.map((i) =>
+        i.uid === uid ? { ...i, x: spot.x, y: spot.y, rot: spot.rot } : i,
+      ),
+    });
+    return true;
   }
-  return best;
+
+  const step = mode === 'raw' ? 0 : mode === 'fine' ? 0.1 : 0.25;
+  const sx = step ? Math.round(x / step) * step : x;
+  const sy = step ? Math.round(y / step) * step : y;
+
+  if (item.mount === 'ceiling') {
+    // Ceiling pieces may not collide with each other.
+    const clash = st.items.some((o) => {
+      if (o.uid === uid) return false;
+      const of = ITEM_INDEX.get(o.itemId);
+      return (
+        of &&
+        of.mount === 'ceiling' &&
+        Math.hypot(o.x - sx, o.y - sy) < ((of.w + item.w) / 2) * 0.8
+      );
+    });
+    if (clash) return false;
+  }
+
+  const ok =
+    mode === 'raw'
+      ? canPlaceRaw(st.grid, dest.poly, st.items, ITEM_INDEX, item, sx, sy, target.rot, uid)
+      : mode === 'fine'
+        ? canPlaceManual(st.grid, dest.poly, st.items, ITEM_INDEX, item, sx, sy, target.rot, uid)
+        : canPlace(st.grid, dest.poly, st.items, ITEM_INDEX, item, sx, sy, target.rot, uid);
+  if (!ok) return false;
+
+  set({
+    items: st.items.map((i) => (i.uid === uid ? { ...i, x: sx, y: sy, roomId: dest.id } : i)),
+  });
+  return true;
 }
 
-/**
- * Where a wall chain should start, plus the angle of the wall it is drawn
- * from. Priority: exact vertex → projection onto the wall under the cursor
- * (the new wall then aligns to it) → free 0.25 m grid start (no source wall).
- */
-function startWallPoint(p: Vec2, room: Vec2[] | null, walls: BuiltWall[]): { pt: Vec2; ref: number | null } {
-  const segs = wallSegments(room, walls);
-  // 1) Room corner / wall endpoint — the strongest connection.
-  const v = nearestVert(p, [...(room ?? []), ...walls.flatMap((w) => [w.a, w.b])], 0.3);
-  if (v) {
-    // Of the walls running through that vertex, the one the raw click lies
-    // closest to is the wall the user is drawing from.
-    let ref: number | null = null;
-    let bd = Infinity;
-    for (const s of segs) {
-      if (distPointSeg(v, s.a, s.b) > 0.01) continue; // not incident to the vertex
-      const d = distPointSeg(p, s.a, s.b);
-      if (d < bd) {
-        bd = d;
-        ref = Math.atan2(s.b.y - s.a.y, s.b.x - s.a.x);
-      }
-    }
-    return { pt: v, ref };
-  }
-  // 2) Snap onto the wall under the cursor — that wall sets the alignment.
-  const seg = nearestWallLine(p, segs, 0.25);
-  if (seg) {
-    return {
-      pt: projectOnSeg(p, seg.a, seg.b),
-      ref: Math.atan2(seg.b.y - seg.a.y, seg.b.x - seg.a.x),
-    };
-  }
-  // 3) Free ground: plain grid start, no alignment source.
-  const SNAP = 0.25;
-  return { pt: { x: Math.round(p.x / SNAP) * SNAP, y: Math.round(p.y / SNAP) * SNAP }, ref: null };
-}
-
-/**
- * Snap a wall click. Vertices win (corners make the cleanest joints). With a
- * chain in progress the direction locks to `ref + k*45°` — parallel, square or
- * diagonal to the wall the chain was started from — lengths round to 0.25 m,
- * and the point lands exactly on any wall the aligned ray crosses close to the
- * click. Exported so the canvas can preview exactly where a click will land.
- */
-export function snapWallPoint(
-  p: Vec2,
-  room: Vec2[] | null,
-  walls: BuiltWall[],
-  chain: Vec2[],
-  ref: number | null,
-): Vec2 {
-  const SNAP = 0.25;
-  const verts: Vec2[] = [...(room ?? [])];
-  for (const w of walls) verts.push(w.a, w.b);
-  verts.push(...chain);
-  const best = nearestVert(p, verts, 0.3);
-  if (best) return { x: best.x, y: best.y };
-
-  // Starting fresh: fall back to the start rules (wall projection / grid).
-  if (!chain.length) return startWallPoint(p, room, walls).pt;
-
-  const anchor = chain[chain.length - 1];
-  const dx = p.x - anchor.x;
-  const dy = p.y - anchor.y;
-  const len = Math.hypot(dx, dy);
-  if (len <= 0.2) {
-    return { x: Math.round(p.x / SNAP) * SNAP, y: Math.round(p.y / SNAP) * SNAP };
-  }
-
-  // Lock the direction to the source wall's lattice: ref + k*45°.
-  const base = ref ?? 0;
-  const ang = base + Math.round((Math.atan2(dy, dx) - base) / (Math.PI / 4)) * (Math.PI / 4);
-  const dir = { x: Math.cos(ang), y: Math.sin(ang) };
-
-  // Terminating exactly on a wall the aligned ray crosses close to the click
-  // beats rounding — a partition meets the wall it was aimed at cleanly
-  // (T-junction), and the result is still within 0.4 m of the raw click.
-  const hit = rayWallHit(anchor, dir, room, walls, p, 0.4);
-  if (hit) return hit;
-
-  // Round the length (never x/y) so rotated chains stay exactly on the axis.
-  const len2 = Math.max(SNAP, Math.round(len / SNAP) * SNAP);
-  return { x: anchor.x + dir.x * len2, y: anchor.y + dir.y * len2 };
-}
 
 export const useStore = create<AppState>((set, get) => ({
   tier: 'free',
   mode: 'draw',
   draft: null,
-  room: null,
-  openings: [],
+  rooms: [],
+  activeRoomId: null,
   grid: null,
   items: [],
   selected: null,
-  roomKind: 'living',
   edgeEdit: false,
   walls: [],
   wallBuild: false,
@@ -383,22 +339,91 @@ export const useStore = create<AppState>((set, get) => ({
 
   toastMsg: (m) => toast(get, set, m),
   setMode: (m) => {
-    const { room, grid } = get();
-    if ((m === 'furnish' || m === '3d') && (!room || !grid)) {
+    const st = get();
+    if ((m === 'furnish' || m === '3d') && (!st.rooms.length || !st.grid)) {
       toast(get, set, 'Draw a room first — click to place corners, then click the first point.');
       set({ mode: 'draw' });
       return;
     }
     // Commit any in-progress wall chain before leaving the 2D view.
-    if (m === '3d' && get().wallDraft) get().finishWallDraft();
+    if (m === '3d' && st.wallDraft) get().finishWallDraft();
     set({
       mode: m,
-      selected: m === '3d' ? null : get().selected,
+      selected: m === '3d' ? null : st.selected,
       ...(m === '3d' ? { wallBuild: false, wallDraft: null, wallRef: null } : {}),
     });
   },
   setTier: (t) => set({ tier: t }),
-  setRoomKind: (k) => set({ roomKind: k }),
+
+  // -------------------------------------------------------------- rooms
+  setActiveRoom: (id) => set({ activeRoomId: id, selected: null }),
+
+  setRoomKind: (k) => {
+    const st = get();
+    if (!st.activeRoomId) return;
+    set({ rooms: st.rooms.map((r) => (r.id === st.activeRoomId ? { ...r, kind: k } : r)) });
+  },
+
+  setRoomName: (n) => {
+    const st = get();
+    if (!st.activeRoomId) return;
+    set({ rooms: st.rooms.map((r) => (r.id === st.activeRoomId ? { ...r, name: n } : r)) });
+  },
+
+  /**
+   * Add a room from a closed outline and make it active. Rejects outlines that
+   * are too small or that already sit inside an existing room, so drawing a
+   * loop can never silently swallow the room you are working on.
+   */
+  addRoom: (poly, openings) => {
+    const st = get();
+    const clean = cleanPolygon(poly);
+    if (!clean) {
+      toast(get, set, 'That loop is too small to be a room — aim for at least 4 m².');
+      return false;
+    }
+    // A room must not overlap an existing one; two outlines sharing floor would
+    // make furniture placement ambiguous.
+    for (const r of st.rooms) {
+      if (polysOverlap(clean, r.poly)) {
+        toast(get, set, 'That loop overlaps an existing room — draw it in clear floor.');
+        return false;
+      }
+    }
+    const room: Room = {
+      id: nextRoomId(),
+      poly: clean,
+      openings: openings ?? suggestOpenings(clean),
+      kind: 'living',
+      name: '',
+    };
+    const rooms = [...st.rooms, room];
+    set({
+      rooms,
+      activeRoomId: room.id,
+      grid: makeGrid(rooms, st.walls),
+      mode: 'furnish',
+    });
+    return true;
+  },
+
+  removeRoom: (id) => {
+    const st = get();
+    const rooms = st.rooms.filter((r) => r.id !== id);
+    if (rooms.length === st.rooms.length) return;
+    const nextActive = st.activeRoomId === id ? rooms[0]?.id ?? null : st.activeRoomId;
+    set({
+      rooms,
+      activeRoomId: nextActive,
+      // Items in a deleted room have nowhere to live.
+      items: st.items.filter((i) => i.roomId !== id),
+      grid: rooms.length ? makeGrid(rooms, st.walls) : null,
+      selected: null,
+      mode: rooms.length ? st.mode : 'draw',
+    });
+    toast(get, set, 'Room deleted.');
+  },
+
   setEdgeEdit: (v) => {
     if (v && get().wallDraft) get().finishWallDraft();
     set(v ? { edgeEdit: true, wallBuild: false, wallDraft: null, wallRef: null } : { edgeEdit: false });
@@ -421,7 +446,7 @@ export const useStore = create<AppState>((set, get) => ({
     // Start a new chain — remember which wall it is drawn from, so every
     // segment of the chain stays aligned to that wall.
     if (!pts.length) {
-      const { pt, ref } = startWallPoint(p, st.room, st.walls);
+      const { pt, ref } = startWallPoint(p, roomPolys(st), st.walls);
       set({ wallDraft: [pt], wallRef: ref });
       toast(
         get,
@@ -435,19 +460,16 @@ export const useStore = create<AppState>((set, get) => ({
 
     const first = pts[0];
 
-    // Clicking the first point closes the loop.
-    if (pts.length >= 3 && dist2(p, first) < 0.4 * 0.4) {
-      const walls = [...st.walls];
-      for (let i = 1; i < pts.length; i++) {
-        walls.push({ id: nextWallId(), a: pts[i - 1], b: pts[i], kind: 'wall' });
-      }
-      walls.push({ id: nextWallId(), a: pts[pts.length - 1], b: first, kind: 'wall' });
-      set({ wallDraft: null, wallRef: null, walls, grid: st.room ? makeGrid(st.room, walls, st.openings) : st.grid });
-      toast(get, set, 'Wall loop closed.');
+    // Clicking the first point closes the loop. Append it to the chain so the
+    // closing segment becomes a real wall, then commit — finishWallDraft
+    // recognises the repeated start point and turns the loop into a room.
+    if (pts.length >= 3 && dist2(p, first) < CLOSE_RADIUS * CLOSE_RADIUS) {
+      set({ wallDraft: [...pts, first] });
+      get().finishWallDraft();
       return;
     }
 
-    const q = snapWallPoint(p, st.room, st.walls, pts, st.wallRef);
+    const q = snapWallPoint(p, roomPolys(st), st.walls, pts, st.wallRef);
     const last = pts[pts.length - 1];
     if (dist2(q, last) < 0.2 * 0.2) return; // ignore tiny segments
     // Clicking back on the start point ends the chain (needs >= 2 segments).
@@ -457,25 +479,92 @@ export const useStore = create<AppState>((set, get) => ({
     }
     set({ wallDraft: [...pts, q] });
   },
+  /**
+   * Commit the wall chain. When the chain came back to its own start the loop
+   * encloses a space, so it becomes a room on the spot — that is how the 🧱
+   * tool doubles as a room builder, and it means nobody has to redraw the same
+   * outline a second time with the ✏️ draw tool.
+   */
   finishWallDraft: () => {
     const st = get();
     if (!st.wallDraft) return;
     const pts = st.wallDraft;
-    if (pts.length >= 2) {
-      const walls = [...st.walls];
-      for (let i = 1; i < pts.length; i++) {
-        walls.push({ id: nextWallId(), a: pts[i - 1], b: pts[i], kind: 'wall' });
-      }
-      set({ wallDraft: null, wallRef: null, walls, grid: st.room ? makeGrid(st.room, walls, st.openings) : st.grid });
-      toast(get, set, 'Wall finished.');
-    } else {
+    if (pts.length < 2) {
       set({ wallDraft: null, wallRef: null });
+      return;
     }
+    // A chain whose last point sits back on its first point has closed a loop.
+    // Drop that repeated point: the room outline must not carry a zero-length
+    // edge, and the segments either side already form the closing wall.
+    const closed = pts.length >= 4 && dist2(pts[pts.length - 1], pts[0]) < CLOSE_RADIUS * CLOSE_RADIUS;
+    const path = closed ? pts.slice(0, -1) : pts;
+
+    const walls = [...st.walls];
+    const loopWallIds = new Set<string>();
+    for (let i = 1; i < path.length; i++) {
+      const id = nextWallId();
+      loopWallIds.add(id);
+      walls.push({ id, a: path[i - 1], b: path[i], kind: 'wall' });
+    }
+
+    // The room is the enclosed floor, so the walls that form it become part of
+    // the room outline rather than staying as free-built partitions.
+    const outline = closed ? path : null;
+    const remaining = loopWallIds.size
+      ? walls.filter((w) => !loopWallIds.has(w.id))
+      : walls;
+
+    set({ wallDraft: null, wallRef: null, walls: remaining });
+    if (!outline) {
+      const st2 = get();
+      set({ grid: st2.rooms.length ? makeGrid(st2.rooms, remaining) : st2.grid });
+      toast(get, set, 'Wall finished.');
+      return;
+    }
+
+    // A room from the loop, plus any earlier rooms on the plan. If the outline
+    // can't become a room, the walls stay as free-built partitions rather than
+    // being thrown away — the user drew them either way.
+    const clean = cleanPolygon(outline);
+    if (!clean) {
+      const st3 = get();
+      set({ grid: st3.rooms.length ? makeGrid(st3.rooms, walls) : st3.grid });
+      toast(get, set, 'Wall loop closed — but it is too small to be a room.');
+      return;
+    }
+    for (const r of get().rooms) {
+      if (polysOverlap(clean, r.poly)) {
+        const st4 = get();
+        set({ grid: st4.rooms.length ? makeGrid(st4.rooms, walls) : st4.grid });
+        toast(get, set, 'Wall loop closed — it overlaps an existing room, so it stayed walls.');
+        return;
+      }
+    }
+    const room: Room = {
+      id: nextRoomId(),
+      poly: clean,
+      openings: suggestOpenings(clean),
+      kind: 'living',
+      name: '',
+    };
+    const rooms = [...get().rooms, room];
+    set({
+      rooms,
+      activeRoomId: room.id,
+      grid: makeGrid(rooms, remaining),
+      mode: 'furnish',
+      selected: null,
+    });
+    toast(
+      get,
+      set,
+      `Room created — ${polyArea(clean).toFixed(1)} m². Name it and pick its type, then AI Fill.`,
+    );
   },
   removeWall: (id) => {
     const st = get();
     const walls = st.walls.filter((w) => w.id !== id);
-    set({ walls, grid: st.room ? makeGrid(st.room, walls, st.openings) : st.grid });
+    set({ walls, grid: st.rooms.length ? makeGrid(st.rooms, walls) : st.grid });
   },
   select: (uid) => set({ selected: uid }),
   setUpgradeOpen: (v) => set({ upgradeOpen: v }),
@@ -500,25 +589,14 @@ export const useStore = create<AppState>((set, get) => ({
       toast(get, set, 'A room needs at least 3 corners.');
       return;
     }
-    const area = polyArea(draft);
-    if (area < 4) {
-      toast(get, set, 'Room is too small — aim for at least 4 m².');
-      return;
-    }
-    const openings = suggestOpenings(draft);
-    const grid = makeGrid(draft, get().walls, openings);
-    set({ room: draft, draft: null, openings, grid, mode: 'furnish', items: [], selected: null });
-    toast(
-      get,
-      set,
-      `Room ready — ${area.toFixed(1)} m². Click library items or run AI Fill.`,
-    );
+    if (!get().addRoom(draft)) return;
+    set({ draft: null });
   },
   clearRoom: () =>
     set({
-      room: null,
+      rooms: [],
+      activeRoomId: null,
       draft: null,
-      openings: [],
       grid: null,
       items: [],
       selected: null,
@@ -534,7 +612,8 @@ export const useStore = create<AppState>((set, get) => ({
     const st = get();
     const item = ITEM_INDEX.get(itemId);
     if (!item) return;
-    if (!st.grid || !st.room) {
+    const room = activeRoom(st);
+    if (!st.grid || !room) {
       toast(get, set, 'Draw a room first.');
       return;
     }
@@ -544,11 +623,11 @@ export const useStore = create<AppState>((set, get) => ({
     }
     const spot = findBestSpot(
       st.grid,
-      st.room,
+      room.poly,
       st.items,
       ITEM_INDEX,
       item,
-      edgesOf(st.room, st.openings, st.walls),
+      edgesOf(room.poly, room.openings, st.walls),
     );
     if (!spot) {
       toast(get, set, `No room for the ${item.name} — remove something first.`);
@@ -557,6 +636,7 @@ export const useStore = create<AppState>((set, get) => ({
     const placed: PlacedItem = {
       uid: nextUid(),
       itemId,
+      roomId: room.id,
       x: spot.x,
       y: spot.y,
       rot: spot.rot,
@@ -566,146 +646,29 @@ export const useStore = create<AppState>((set, get) => ({
     toast(get, set, `${item.name} placed.`);
   },
 
-  tryMove: (uid, x, y) => {
-    const st = get();
-    if (!st.grid || !st.room) return false;
-    const target = st.items.find((i) => i.uid === uid);
-    if (!target) return false;
-    const item = ITEM_INDEX.get(target.itemId);
-    if (!item) return false;
-    const edges = edgesOf(st.room, st.openings, st.walls);
-
-    if (item.mount === 'wall') {
-      // Wall pieces snap onto the nearest non-door wall.
-      const spot = projectToWall(st.room, edges, item, x, y);
-      if (!spot) return false;
-      if (!canPlace(st.grid, st.room, st.items, ITEM_INDEX, item, spot.x, spot.y, spot.rot, uid))
-        return false;
-      set({
-        items: st.items.map((i) => (i.uid === uid ? { ...i, x: spot.x, y: spot.y, rot: spot.rot } : i)),
-      });
-      return true;
-    }
-
-    const sx = Math.round(x / 0.25) * 0.25;
-    const sy = Math.round(y / 0.25) * 0.25;
-    if (item.mount === 'ceiling') {
-      // Ceiling pieces may not collide with each other.
-      const clash = st.items.some((o) => {
-        if (o.uid === uid) return false;
-        const of = ITEM_INDEX.get(o.itemId);
-        return (
-          of &&
-          of.mount === 'ceiling' &&
-          Math.hypot(o.x - sx, o.y - sy) < ((of.w + item.w) / 2) * 0.8
-        );
-      });
-      if (clash) return false;
-    }
-    if (!canPlace(st.grid, st.room, st.items, ITEM_INDEX, item, sx, sy, target.rot, uid)) return false;
-    set({
-      items: st.items.map((i) => (i.uid === uid ? { ...i, x: sx, y: sy } : i)),
-    });
-    return true;
-  },
+  tryMove: (uid, x, y) => moveItem(get(), set, uid, x, y, 'snap'),
 
   /** Fine-grained move for keyboard nudges (0.1 m snap instead of 0.25 m). */
-  tryMoveFine: (uid, x, y) => {
-    const st = get();
-    if (!st.grid || !st.room) return false;
-    const target = st.items.find((i) => i.uid === uid);
-    if (!target) return false;
-    const item = ITEM_INDEX.get(target.itemId);
-    if (!item) return false;
-    const edges = edgesOf(st.room, st.openings, st.walls);
+  tryMoveFine: (uid, x, y) => moveItem(get(), set, uid, x, y, 'fine'),
 
-    if (item.mount === 'wall') {
-      const spot = projectToWall(st.room, edges, item, x, y);
-      if (!spot) return false;
-      if (!canPlace(st.grid, st.room, st.items, ITEM_INDEX, item, spot.x, spot.y, spot.rot, uid))
-        return false;
-      set({
-        items: st.items.map((i) => (i.uid === uid ? { ...i, x: spot.x, y: spot.y, rot: spot.rot } : i)),
-      });
-      return true;
-    }
+  /** Raw move for drag operations - no snap, no door clearance, just collision + walls. */
+  tryMoveRaw: (uid, x, y) => moveItem(get(), set, uid, x, y, 'raw'),
 
-    // 0.1 m snap for fine control
-    const sx = Math.round(x / 0.1) * 0.1;
-    const sy = Math.round(y / 0.1) * 0.1;
-    if (item.mount === 'ceiling') {
-      const clash = st.items.some((o) => {
-        if (o.uid === uid) return false;
-        const of = ITEM_INDEX.get(o.itemId);
-        return (
-          of &&
-          of.mount === 'ceiling' &&
-          Math.hypot(o.x - sx, o.y - sy) < ((of.w + item.w) / 2) * 0.8
-        );
-      });
-      if (clash) return false;
-    }
-    // Skip door-approach clearance for manual fine moves — AI Fill still uses 0.91 m
-    if (!canPlaceManual(st.grid, st.room, st.items, ITEM_INDEX, item, sx, sy, target.rot, uid)) return false;
-    set({
-      items: st.items.map((i) => (i.uid === uid ? { ...i, x: sx, y: sy } : i)),
-    });
-    return true;
-  },
-
-  /** Raw move for drag operations — no snap, no door clearance, just collision + walls. */
-  tryMoveRaw: (uid, x, y) => {
-    const st = get();
-    if (!st.grid || !st.room) return false;
-    const target = st.items.find((i) => i.uid === uid);
-    if (!target) return false;
-    const item = ITEM_INDEX.get(target.itemId);
-    if (!item) return false;
-    const edges = edgesOf(st.room, st.openings, st.walls);
-
-    if (item.mount === 'wall') {
-      const spot = projectToWall(st.room, edges, item, x, y);
-      if (!spot) return false;
-      if (!canPlace(st.grid, st.room, st.items, ITEM_INDEX, item, spot.x, spot.y, spot.rot, uid))
-        return false;
-      set({
-        items: st.items.map((i) => (i.uid === uid ? { ...i, x: spot.x, y: spot.y, rot: spot.rot } : i)),
-      });
-      return true;
-    }
-
-    if (item.mount === 'ceiling') {
-      const clash = st.items.some((o) => {
-        if (o.uid === uid) return false;
-        const of = ITEM_INDEX.get(o.itemId);
-        return (
-          of &&
-          of.mount === 'ceiling' &&
-          Math.hypot(o.x - x, o.y - y) < ((of.w + item.w) / 2) * 0.8
-        );
-      });
-      if (clash) return false;
-    }
-    // Only basic collision + wall check — no door clearance, no grid snap
-    if (!canPlaceRaw(st.grid, st.room, st.items, ITEM_INDEX, item, x, y, target.rot, uid)) return false;
-    set({
-      items: st.items.map((i) => (i.uid === uid ? { ...i, x, y } : i)),
-    });
-    return true;
-  },
 
   rotateSelected: () => {
     const st = get();
-    if (!st.selected || !st.grid || !st.room) return;
+    if (!st.selected || !st.grid) return;
     const target = st.items.find((i) => i.uid === st.selected);
     if (!target) return;
+    const room = roomOfItem(st, target);
+    if (!room) return;
     const item = ITEM_INDEX.get(target.itemId);
     if (!item) return;
-    const edges = edgesOf(st.room, st.openings, st.walls);
+    const edges = edgesOf(room.poly, room.openings, st.walls);
 
     if (item.mount === 'wall') {
       // Wall pieces hop to the next wall that fits.
-      const spot = nextWallSpot(st.room, st.items, ITEM_INDEX, item, edges, target.x, target.y);
+      const spot = nextWallSpot(room.poly, st.items, ITEM_INDEX, item, edges, target.x, target.y);
       if (!spot) {
         toast(get, set, 'No other wall fits this piece.');
         return;
@@ -720,7 +683,7 @@ export const useStore = create<AppState>((set, get) => ({
     }
 
     const rot = target.rot + 90;
-    if (!canPlace(st.grid, st.room, st.items, ITEM_INDEX, item, target.x, target.y, rot, target.uid)) {
+    if (!canPlace(st.grid, room.poly, st.items, ITEM_INDEX, item, target.x, target.y, rot, target.uid)) {
       toast(get, set, "Can't rotate there — not enough space.");
       return;
     }
@@ -729,18 +692,20 @@ export const useStore = create<AppState>((set, get) => ({
 
   duplicateSelected: () => {
     const st = get();
-    if (!st.selected || !st.grid || !st.room) return;
+    if (!st.selected || !st.grid) return;
     const target = st.items.find((i) => i.uid === st.selected);
     if (!target) return;
+    const room = roomOfItem(st, target);
+    if (!room) return;
     const item = ITEM_INDEX.get(target.itemId);
     if (!item) return;
     const spot = findBestSpot(
       st.grid,
-      st.room,
+      room.poly,
       st.items,
       ITEM_INDEX,
       item,
-      edgesOf(st.room, st.openings, st.walls),
+      edgesOf(room.poly, room.openings, st.walls),
       { rotations: [target.rot, ((target.rot + 90) % 360) as 0 | 90] },
     );
     if (!spot) {
@@ -772,73 +737,119 @@ export const useStore = create<AppState>((set, get) => ({
     set({ items: st.items.map((i) => (i.uid === uid ? { ...i, colorIdx: idx } : i)) });
   },
 
-  cycleEdge: (idx) => {
+  /** Cycle one edge of the active room between wall / window / door. */
+  /**
+   * Cycle one edge of a room between wall / window / door. Takes the room id
+   * explicitly (not just the active room) so clicking an edge in a room you
+   * aren't currently editing still changes the right wall.
+   */
+  cycleEdge: (roomId, idx) => {
     const st = get();
-    if (!st.room) return;
+    const room = st.rooms.find((r) => r.id === roomId) ?? activeRoom(st);
+    if (!room) return;
     const order: EdgeKind[] = ['wall', 'window', 'door'];
-    const cur = st.openings[idx] ?? 'wall';
+    const cur = room.openings[idx] ?? 'wall';
     const next = order[(order.indexOf(cur) + 1) % order.length];
-    const openings = st.openings.map((o, i) => (i === idx ? next : o));
+    const openings = room.openings.map((o, i) => (i === idx ? next : o));
+    const rooms = st.rooms.map((r) => (r.id === room.id ? { ...r, openings } : r));
     // Rebuild the grid so a new door edge blocks its swing + entry path.
-    set({ openings, grid: makeGrid(st.room, st.walls, openings) });
+    set({ rooms, grid: makeGrid(rooms, st.walls) });
     toast(get, set, `Edge → ${next}`);
+  },
+
+  /** Cycle the kind of a built wall between wall / window / door. */
+  cycleWallEdge: (id) => {
+    const st = get();
+    const w = st.walls.find((x) => x.id === id);
+    if (!w) return;
+    const order: EdgeKind[] = ['wall', 'window', 'door'];
+    const next = order[(order.indexOf(w.kind) + 1) % order.length];
+    const walls = st.walls.map((x) => (x.id === id ? { ...x, kind: next } : x));
+    set({ walls, grid: st.rooms.length ? makeGrid(st.rooms, walls) : st.grid });
+    toast(get, set, `Wall → ${next}`);
   },
 
   aiFill: () => {
     const st = get();
-    if (!st.grid || !st.room) {
+    if (!st.grid || !st.rooms.length) {
       toast(get, set, 'Draw a room first.');
       return;
     }
-    const steps = PRESETS[st.roomKind];
-    const edges = edgesOf(st.room, st.openings, st.walls);
+
+    // Fill every room with the objects its own type calls for, so a plan with a
+    // living room and a kitchen gets a sofa and a run of worktops rather than
+    // the same layout twice. The grid spans all rooms, so rooms can't collide.
     let placed = 0;
     let skipped = 0;
     const items: PlacedItem[] = [];
 
-    for (const step of steps) {
-      const count = step.count ?? 1;
-      for (let c = 0; c < count; c++) {
-        // Unlocked candidates, preferring the requested kind.
-        let pool = LIBRARY.filter(
-          (i) => i.type === step.type && tierUnlocked(i.tier, st.tier),
-        );
-        if (!pool.length) continue;
-        if (step.kind) {
-          const exact = pool.filter((i) => i.kind === step.kind);
-          if (exact.length) pool = exact;
-        }
-        // R22 — the coffee table should be 1/2 to 2/3 the length of the sofa.
-        if (step.kind === 'coffee') {
-          const sofa = items.find((it) => ITEM_INDEX.get(it.itemId)?.kind === 'sofa');
-          if (sofa) {
-            const sf = ITEM_INDEX.get(sofa.itemId)!;
-            const fit = pool.filter(
-              (i) => i.w >= CLEARANCE.coffeeLenMin * sf.w && i.w <= CLEARANCE.coffeeLenMax * sf.w,
-            );
-            if (fit.length) pool = fit;
+    for (const room of st.rooms) {
+      const steps = PRESETS[room.kind] ?? PRESETS.living;
+      const edges = edgesOf(room.poly, room.openings, st.walls);
+      const inRoom: PlacedItem[] = [];
+
+      for (const step of steps) {
+        const count = step.count ?? 1;
+        for (let c = 0; c < count; c++) {
+          // Unlocked candidates, preferring the requested kind.
+          let pool = LIBRARY.filter(
+            (i) => i.type === step.type && tierUnlocked(i.tier, st.tier),
+          );
+          if (!pool.length) continue;
+          if (step.kind) {
+            const exact = pool.filter((i) => i.kind === step.kind);
+            if (exact.length) pool = exact;
           }
+          // R22 — the coffee table should be 1/2 to 2/3 the length of the sofa.
+          if (step.kind === 'coffee') {
+            const sofa = inRoom.find((it) => ITEM_INDEX.get(it.itemId)?.kind === 'sofa');
+            if (sofa) {
+              const sf = ITEM_INDEX.get(sofa.itemId)!;
+              const fit = pool.filter(
+                (i) => i.w >= CLEARANCE.coffeeLenMin * sf.w && i.w <= CLEARANCE.coffeeLenMax * sf.w,
+              );
+              if (fit.length) pool = fit;
+            }
+          }
+          const pick = pool[Math.floor(Math.random() * pool.length)];
+          // Place against everything already in the room *and* other rooms.
+          const spot = findBestSpot(st.grid, room.poly, items, ITEM_INDEX, pick, edges);
+          if (!spot) {
+            skipped++;
+            continue;
+          }
+          const it: PlacedItem = {
+            uid: nextUid(),
+            itemId: pick.id,
+            roomId: room.id,
+            x: spot.x,
+            y: spot.y,
+            rot: spot.rot,
+            colorIdx: 0,
+          };
+          inRoom.push(it);
+          items.push(it);
+          placed++;
         }
-        const pick = pool[Math.floor(Math.random() * pool.length)];
-        const spot = findBestSpot(st.grid, st.room, items, ITEM_INDEX, pick, edges);
-        if (!spot) {
-          skipped++;
-          continue;
-        }
-        items.push({ uid: nextUid(), itemId: pick.id, x: spot.x, y: spot.y, rot: spot.rot, colorIdx: 0 });
-        placed++;
+      }
+      // Post-pass: apply the relational design rules (conversation circle,
+      // coffee-table gap, nightstands, art placement, rug anchoring, …). It
+      // works on this room's items only — a bedroom's bed shouldn't be related
+      // to the sofa two rooms away — then the results are copied back by uid.
+      refineLayout(st.grid, room.poly, inRoom, ITEM_INDEX, edges);
+      for (const refined of inRoom) {
+        const at = items.findIndex((i) => i.uid === refined.uid);
+        if (at >= 0) items[at] = refined;
       }
     }
-    // Post-pass: apply the relational design rules (conversation circle,
-    // coffee-table gap, nightstands, art placement, rug anchoring, …).
-    refineLayout(st.grid, st.room, items, ITEM_INDEX, edges);
     set({ items, selected: null });
+    const rooms = st.rooms.length;
     toast(
       get,
       set,
       skipped
-        ? `AI placed ${placed} items (${skipped} didn't fit — try a bigger room).`
-        : `AI placed ${placed} items using the ${RULES.length}-rule design guide. Drag to fine-tune, tap one to swap.`,
+        ? `AI placed ${placed} items across ${rooms} room${rooms > 1 ? 's' : ''} (${skipped} didn't fit — try a bigger room).`
+        : `AI placed ${placed} items across ${rooms} room${rooms > 1 ? 's' : ''} using the ${RULES.length}-rule design guide.`,
     );
   },
 
@@ -881,19 +892,18 @@ export const useStore = create<AppState>((set, get) => ({
 
   saveProject: () => {
     const st = get();
-    if (!st.room) {
+    if (!st.rooms.length) {
       toast(get, set, 'Nothing to save yet.');
       return;
     }
-    const data: Project = {
-      room: st.room,
-      openings: st.openings,
+    const data: ProjectV2 = {
+      rooms: st.rooms,
       items: st.items,
-      roomKind: st.roomKind,
       walls: st.walls,
+      activeRoomId: st.activeRoomId,
     };
     localStorage.setItem('roomcraft:project', JSON.stringify(data));
-    toast(get, set, 'Project saved to this browser.');
+    toast(get, set, `Project saved — ${st.rooms.length} room${st.rooms.length > 1 ? 's' : ''}.`);
   },
 
   loadProject: () => {
@@ -904,15 +914,39 @@ export const useStore = create<AppState>((set, get) => ({
     }
     try {
       const data = JSON.parse(raw) as Project;
-      const walls = data.walls ?? [];
-      const grid = makeGrid(data.room, walls, data.openings);
+      const v2 = data as ProjectV2;
+      const v1 = data as ProjectV1;
+      // v1 saved a single room; lift it into the room list so old projects open.
+      let rooms: Room[];
+      if (Array.isArray(v2.rooms) && v2.rooms.length) {
+        rooms = v2.rooms;
+      } else if (Array.isArray(v1.room) && v1.room.length >= 3) {
+        rooms = [
+          {
+            id: nextRoomId(),
+            poly: v1.room,
+            openings: v1.openings ?? [],
+            kind: v1.roomKind ?? 'living',
+            name: '',
+          },
+        ];
+      } else {
+        throw new Error('no room outline');
+      }
+      const walls = v2.walls ?? v1.walls ?? [];
+      // Older saves predate roomId on items; attach them to the only room.
+      const items = (v2.items ?? v1.items ?? []).map((i) => ({
+        ...i,
+        roomId: i.roomId ?? rooms[0].id,
+      }));
+      const activeRoomId =
+        ('activeRoomId' in data ? data.activeRoomId : null) ?? rooms[0]?.id ?? null;
       set({
-        room: data.room,
-        openings: data.openings,
-        items: data.items,
-        roomKind: data.roomKind,
+        rooms,
+        activeRoomId,
+        items,
         walls,
-        grid,
+        grid: makeGrid(rooms, walls),
         mode: 'furnish',
         selected: null,
         draft: null,
@@ -920,20 +954,20 @@ export const useStore = create<AppState>((set, get) => ({
         wallRef: null,
         wallBuild: false,
       });
-      toast(get, set, 'Project loaded.');
+      toast(get, set, `Project loaded — ${rooms.length} room${rooms.length > 1 ? 's' : ''}.`);
     } catch {
       toast(get, set, 'Saved project is corrupted.');
     }
   },
 
   loadDemo: () => {
-    const walls = [...DEMO_ROOM.walls];
-    const grid = makeGrid(DEMO_ROOM.room, walls, DEMO_ROOM.openings);
+    const walls = [...DEMO_WALLS];
+    const rooms = DEMO_ROOMS.map((r) => ({ ...r, poly: r.poly.map((p) => ({ ...p })) }));
+    const grid = makeGrid(rooms, walls);
     set({
-      room: DEMO_ROOM.room,
-      openings: [...DEMO_ROOM.openings],
+      rooms,
+      activeRoomId: rooms[0].id,
       items: [],
-      roomKind: DEMO_ROOM.roomKind,
       walls,
       grid,
       draft: null,
@@ -957,6 +991,18 @@ if (typeof window !== 'undefined') {
 }
 
 /** Convenience selectors. */
-export const selectArea = (s: AppState) => (s.room ? polyArea(s.room) : 0);
-export const selectCentroid = (s: AppState) => (s.room ? polyCentroid(s.room) : { x: 0, y: 0 });
+export const selectActiveRoom = activeRoom;
+export const selectRooms = (s: AppState) => s.rooms;
+export const selectRoomPolys = roomPolys;
+/** Floor area of the whole plan, in m². */
+export const selectArea = (s: AppState) => s.rooms.reduce((n, r) => n + polyArea(r.poly), 0);
+/** Bounding-box centre of the plan, used to frame the camera. */
+export const selectCentroid = (s: AppState) => {
+  if (!s.rooms.length) return { x: 0, y: 0 };
+  const r = activeRoom(s);
+  return r ? polyCentroid(r.poly) : { x: 0, y: 0 };
+};
+/** Total area of every room on the plan, in m². */
+export const selectPlanArea = (s: AppState) =>
+  s.rooms.reduce((n, r) => n + polyArea(r.poly), 0);
 export { CELL, rotatedSize };

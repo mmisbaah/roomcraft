@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react';
 import type { FurnItem } from '../types';
 
 /**
@@ -56,8 +57,8 @@ function palette(item: FurnItem): Palette {
 
 // --- shared primitives -------------------------------------------------------
 
-const Shadow = ({ cx = 60, rx = 34 }: { cx?: number; rx?: number }) => (
-  <ellipse cx={cx} cy={70} rx={rx} ry={5.5} fill="rgba(15,23,42,0.13)" />
+const Shadow = ({ cx = 60, cy = 70, rx = 34 }: { cx?: number; cy?: number; rx?: number }) => (
+  <ellipse cx={cx} cy={cy} rx={rx} ry={5.5} fill="rgba(15,23,42,0.13)" />
 );
 
 const Legs = ({ n = 4, w = 3, y = 62, h = 8, xs = [30, 90] }) =>
@@ -846,7 +847,7 @@ function Panel({ p }: ShapeProps) {
 
 // --- kind -> shape -----------------------------------------------------------
 
-type Shape = (props: ShapeProps) => JSX.Element;
+type Shape = (props: ShapeProps) => ReactElement;
 
 const SEATING_WIDE: Record<string, Shape> = {
   sofa: Sofa,

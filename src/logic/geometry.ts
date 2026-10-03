@@ -61,6 +61,78 @@ export function polyArea(poly: Vec2[]): number {
   return Math.abs(s) / 2;
 }
 
+/** The smallest room outline we accept, in m². */
+export const MIN_ROOM_AREA = 4;
+
+/**
+ * Tidy a raw outline into something safe to store as a room: drop repeated
+ * points and near-collinear vertices, and return null when what is left isn't
+ * a usable room. Wall loops arrive from clicks that can land on the same spot
+ * or nudge a straight run, and both produce zero-length edges that would break
+ * edge indexing (openings are one-per-edge) and polygon containment tests.
+ */
+export function cleanPolygon(poly: Vec2[]): Vec2[] | null {
+  const EPS_LEN = 0.05; // 5 cm
+  const EPS_CROSS = 0.02; // ~1.1° of bend over a 1 m edge
+
+  // Collapse consecutive duplicates.
+  const out: Vec2[] = [];
+  for (const p of poly) {
+    const last = out[out.length - 1];
+    if (last && Math.hypot(last.x - p.x, last.y - p.y) < EPS_LEN) continue;
+    out.push({ x: p.x, y: p.y });
+  }
+  while (out.length > 1) {
+    const first = out[0];
+    const last = out[out.length - 1];
+    if (Math.hypot(first.x - last.x, first.y - last.y) < EPS_LEN) out.pop();
+    else break;
+  }
+  if (out.length < 3) return null;
+
+  // Drop vertices that sit on the straight line between their neighbours.
+  let changed = true;
+  while (changed && out.length > 3) {
+    changed = false;
+    for (let i = 0; i < out.length; i++) {
+      const prev = out[(i - 1 + out.length) % out.length];
+      const cur = out[i];
+      const next = out[(i + 1) % out.length];
+      const ax = cur.x - prev.x;
+      const ay = cur.y - prev.y;
+      const bx = next.x - cur.x;
+      const by = next.y - cur.y;
+      const len = Math.hypot(ax, ay) * Math.hypot(bx, by);
+      if (len < 1e-9) continue;
+      if (Math.abs((ax * by - ay * bx) / len) < EPS_CROSS) {
+        out.splice(i, 1);
+        changed = true;
+        break;
+      }
+    }
+  }
+
+  if (out.length < 3) return null;
+  if (polyArea(out) < MIN_ROOM_AREA) return null;
+  return out;
+}
+
+/**
+ * Do two polygons share interior area? True when any edge of one crosses the
+ * other, or when one is entirely swallowed by the other (no crossing edges but
+ * still overlapping floor).
+ */
+export function polysOverlap(a: Vec2[], b: Vec2[]): boolean {
+  for (let i = 0, j = a.length - 1; i < a.length; j = i++) {
+    for (let k = 0, l = b.length - 1; k < b.length; l = k++) {
+      if (segsCross(a[j], a[i], b[l], b[k])) return true;
+    }
+  }
+  // No crossings: either disjoint, or one contains the other.
+  if (pointInPoly(a[0], b) || pointInPoly(b[0], a)) return true;
+  return false;
+}
+
 /** Area-weighted centroid; falls back to vertex average for degenerate shapes. */
 export function polyCentroid(poly: Vec2[]): Vec2 {
   let a = 0;

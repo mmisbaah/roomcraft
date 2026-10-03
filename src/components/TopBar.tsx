@@ -1,7 +1,7 @@
 // Top toolbar: brand, view modes, AI fill, plan & export actions.
 
-import { useStore } from '../store';
-import { ROOM_LABEL } from '../logic/placement';
+import { selectActiveRoom, useStore } from '../store';
+import { ROOM_KIND_ORDER, ROOM_LABEL, roomTitle } from '../logic/placement';
 import { exportGLB, exportPNG } from '../lib/exporters';
 import RulesModal from './RulesModal';
 import type { RoomKind, ViewMode } from '../types';
@@ -16,10 +16,12 @@ export default function TopBar() {
   const mode = useStore((s) => s.mode);
   const setMode = useStore((s) => s.setMode);
   const tier = useStore((s) => s.tier);
-  const room = useStore((s) => s.room);
+  const rooms = useStore((s) => s.rooms);
+  const room = useStore(selectActiveRoom);
   const draft = useStore((s) => s.draft);
-  const roomKind = useStore((s) => s.roomKind);
+  const roomKind = room?.kind ?? 'living';
   const setRoomKind = useStore((s) => s.setRoomKind);
+  const setActiveRoom = useStore((s) => s.setActiveRoom);
   const aiFill = useStore((s) => s.aiFill);
   const clearItems = useStore((s) => s.clearItems);
   const clearRoom = useStore((s) => s.clearRoom);
@@ -86,13 +88,27 @@ export default function TopBar() {
         )}
         {mode === 'furnish' && room && (
           <>
+            {rooms.length > 1 && (
+              <select
+                className="kind-select"
+                value={room.id}
+                onChange={(e) => setActiveRoom(e.target.value)}
+                title="Which room to furnish"
+              >
+                {rooms.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {roomTitle(r)}
+                  </option>
+                ))}
+              </select>
+            )}
             <select
               className="kind-select"
               value={roomKind}
               onChange={(e) => setRoomKind(e.target.value as RoomKind)}
               title="Room type for AI Fill"
             >
-              {(Object.keys(ROOM_LABEL) as RoomKind[]).map((k) => (
+              {ROOM_KIND_ORDER.map((k) => (
                 <option key={k} value={k}>
                   {ROOM_LABEL[k]}
                 </option>

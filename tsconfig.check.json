@@ -1,0 +1,27 @@
+{
+  // Check-time config for `npm run typecheck`.
+  //
+  // three@0.186 ships no declarations of its own (they live in @types/three),
+  // and its package.json points `main` at a real build/three.cjs. TypeScript
+  // finds that file, hunts for three.d.cts, misses, and stops — it never falls
+  // back to @types/three. Every `three` import and every React-Three-Fabric
+  // intrinsic (<mesh>, <group>, <boxGeometry>…) is then reported missing:
+  // ~480 errors unrelated to this app's code.
+  //
+  // Map `three` to the declaration entry point so the @types package is used.
+  // moduleResolution stays "bundler" because @types/three@0.186 re-exports via
+  // "./Three.Core.js"-style specifiers that only resolve under it.
+  //
+  // Vite bundles with tsconfig.json, so this file only affects type checking.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "three": ["node_modules/@types/three/index.d.ts"]
+    }
+  },
+  "include": ["src"],
+  // three/addons (GLTFExporter) has no @types/three counterpart; that import is
+  // runtime-only, so it is declared locally rather than silenced here.
+  "exclude": ["src/lib/exporters.ts"]
+}

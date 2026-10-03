@@ -4,8 +4,8 @@ import { Suspense, useEffect, useMemo } from 'react';
 import { Fog, Shape, Vector3 } from 'three';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
-import type { EdgeKind, Vec2 } from '../types';
-import { polyCentroid } from '../logic/geometry';
+import type { EdgeKind, Room, Vec2 } from '../types';
+import { polyArea, polyCentroid } from '../logic/geometry';
 import { objectHotkey } from '../logic/hotkeys';
 import { useStore } from '../store';
 import { content3DRef, camera3DRef } from '../refs';
@@ -100,9 +100,26 @@ function Floor({ room }: { room: Vec2[] }) {
   );
 }
 
+/** Centre of a room outline. */
+function planCentroid(rooms: Room[]): Vec2 {
+  if (!rooms.length) return { x: 0, y: 0 };
+  // Average the per-room centroids: weighted by area so a big room pulls the
+  // camera towards the part of the plan that matters.
+  let ax = 0;
+  let ay = 0;
+  let total = 0;
+  for (const r of rooms) {
+    const c = polyCentroid(r.poly);
+    const a = polyArea(r.poly);
+    ax += c.x * a;
+    ay += c.y * a;
+    total += a;
+  }
+  return total > 0 ? { x: ax / total, y: ay / total } : polyCentroid(rooms[0].poly);
+}
+
 export default function Scene3D() {
-  const room = useStore((s) => s.room);
-  const openings = useStore((s) => s.openings);
+  const rooms = useStore((s) => s.rooms);
   const items = useStore((s) => s.items);
   const walls = useStore((s) => s.walls);
   const select = useStore((s) => s.select);
@@ -157,8 +174,9 @@ export default function Scene3D() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  if (!room) return null;
-  const c = polyCentroid(room);
+  if (!rooms.length) return null;
+  // Frame the whole plan, not just one room, so every space is visible at once.
+  const c = planCentroid(rooms);
   const target: [number, number, number] = [c.x, 0, -c.y];
 
   return (
@@ -193,10 +211,19 @@ export default function Scene3D() {
       <directionalLight position={[-7, 8, -9]} intensity={0.45} />
 
       <group ref={content3DRef}>
-        <Floor room={room} />
-        {room.map((a, i) => (
-          <WallSegment key={i} a={a} b={room[(i + 1) % room.length]} kind={openings[i] ?? 'wall'} />
+        {rooms.map((r) => (
+          <Floor key={r.id} room={r.poly} />
         ))}
+        {rooms.map((r) =>
+          r.poly.map((a, i) => (
+            <WallSegment
+              key={`${r.id}-${i}`}
+              a={a}
+              b={r.poly[(i + 1) % r.poly.length]}
+              kind={r.openings[i] ?? 'wall'}
+            />
+          )),
+        )}
         {/* free-built partitions (🧱 tool) */}
         {walls.map((w) => (
           <WallSegment key={w.id} a={w.a} b={w.b} kind={w.kind} />
