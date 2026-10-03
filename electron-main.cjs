@@ -75,24 +75,37 @@ app.on('web-contents-created', (_e, contents) => {
 // `--selftest` verifies the packaged app can boot and find its entry HTML,
 // then exits. CI runs this so a broken release fails the build instead of
 // shipping a window that shows an error dialog.
+//
+// On Windows an Electron (GUI subsystem) process has no console attached, so
+// stdout from the main process is not visible to the CI shell. The result is
+// therefore written to a file that the workflow reads back.
 if (process.argv.includes('--selftest')) {
+  const fsSync = require('fs');
+  const outPath = process.env.RC_SELFTEST_OUT;
+  const write = (msg) => {
+    if (outPath) {
+      try {
+        fsSync.writeFileSync(outPath, msg);
+      } catch (e) {
+        /* ignore */
+      }
+    }
+    console.log(msg);
+  };
+
   app.whenReady().then(() => {
     const index = resolveIndexHtml();
-    const problem = !index
-      ? 'index.html not found (checked asar root and dist/)'
-      : null;
+    let problem = null;
+    if (!index) problem = 'index.html not found (checked asar root and dist/)';
+    else if (fsSync.statSync(index).size < 100) problem = `index.html is only ${fsSync.statSync(index).size} bytes`;
+    else if (!fsSync.existsSync(path.join(__dirname, 'preload.cjs'))) problem = 'preload.cjs missing from package';
+
     if (problem) {
-      console.error(`SELFTEST FAIL: ${problem}`);
+      write(`SELFTEST FAIL: ${problem}`);
       app.exit(1);
       return;
     }
-    const size = fs.statSync(index).size;
-    if (size < 100) {
-      console.error(`SELFTEST FAIL: index.html is only ${size} bytes`);
-      app.exit(1);
-      return;
-    }
-    console.log(`SELFTEST OK: resolved ${index} (${size} bytes)`);
+    write(`SELFTEST OK: resolved ${index} (${fsSync.statSync(index).size} bytes); preload.cjs present`);
     app.exit(0);
   });
 } else {

@@ -41,11 +41,15 @@ jobs:
       - name: Self-test packaged app
         shell: cmd
         run: |
-          echo Listing app.asar contents:
-          npx asar list "dist-electron\win-unpacked\resources\app.asar"
+          echo Top-level entries inside app.asar:
+          npx asar list "dist-electron\win-unpacked\resources\app.asar" > asar-list.txt
+          type asar-list.txt | findstr /v /c:"node_modules"
           echo.
-          echo Running packaged binary with --selftest:
+          echo Running packaged binary self-test:
+          set RC_SELFTEST_OUT=%CD%\selftest.txt
           "dist-electron\win-unpacked\RoomCraft.exe" --selftest
+          type selftest.txt
+          findstr /b /c:"SELFTEST OK" selftest.txt
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

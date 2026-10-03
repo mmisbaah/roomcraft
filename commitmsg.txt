@@ -1,0 +1,7 @@
+Shrink package and make CI self-test observable
+
+- exclude node_modules from the asar: Vite already bundles the renderer, so
+  dependency sources (three/src, hls.js/src) were dead weight in the exe
+- write the self-test result to a file, because a Windows GUI-subsystem
+  Electron process cannot write to the CI shell stdout
+- filter node_modules noise out of the asar listing in the workflow log
