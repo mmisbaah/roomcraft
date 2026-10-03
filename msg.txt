@@ -1,0 +1,18 @@
+Harden entry-HTML resolution and add pixel-level self-test
+
+The v0.1.2 blank-window release prompted three changes:
+
+- resolveIndexHtml() now prefers dist/index.html and validates the entry with
+  isUsableEntry(). The root index.html is the Vite template, which has no
+  module script: loading it silently yields a blank window. Only dist/ is
+  shipped in the asar, but preferring it keeps the packaged app correct even
+  if the template is ever included.
+- --selftest now captures the window and samples ~80x80 pixels, failing when
+  fewer than 20 distinct colours are present. Checking that #root has children
+  is not enough: assets can fail to resolve under file:// and still leave a
+  mounted-but-empty DOM.
+- add --screenshot <path> using capturePage(), and RC_FORCE_PROD=1 so the
+  packaged code path can be exercised against a local Electron runtime.
+  PrintWindow cannot capture GPU-composited surfaces and Windows blocks
+  SetForegroundWindow from background processes, so external screen-grab tools
+  capture the wrong window and prove nothing.

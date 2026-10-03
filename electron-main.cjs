@@ -7,20 +7,41 @@ const fs = require('fs');
 const path = require('path');
 
 const DEV_URL = 'http://127.0.0.1:5173';
-const isDev = !app.isPackaged;
+// RC_FORCE_PROD=1 loads the built bundle even when running unpackaged, so the
+// packaged code path can be exercised against a local electron binary.
+const isDev = !app.isPackaged && process.env.RC_FORCE_PROD !== '1';
 
-// Resolve the built index.html. electron-builder's file globs can place the
-// built app either at the asar root or under dist/ depending on the pattern,
-// so probe both instead of hard-coding one.
+// Resolve the built index.html.
+//
+// The built bundle must win over any same-named file at the package root: the
+// project's root index.html is the Vite *template* (it has no module script,
+// so loading it silently yields a blank window). In the packaged asar only
+// dist/ ships, but preferring it keeps the app correct either way.
 function resolveIndexHtml() {
   const candidates = [
-    path.join(__dirname, 'index.html'),
     path.join(__dirname, 'dist', 'index.html'),
+    path.join(__dirname, 'index.html'),
   ];
   for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
+    if (fs.existsSync(p) && isUsableEntry(p)) return p;
   }
   return null;
+}
+
+// A usable entry HTML must reference the JS bundle and a mount point; the
+// Vite template satisfies neither and renders nothing.
+function isUsableEntry(file) {
+  if (!file) return false;
+  let html;
+  try {
+    html = fs.readFileSync(file, 'utf8');
+  } catch (e) {
+    return false;
+  }
+  if (html.length < 100) return false;
+  if (!/<script[^>]+src=/i.test(html)) return false;
+  if (!/id="root"/.test(html)) return false;
+  return true;
 }
 
 function createWindow() {
@@ -51,7 +72,7 @@ function createWindow() {
 
   const index = resolveIndexHtml();
   if (!index) {
-    console.error('[roomcraft] could not find index.html in the package');
+    console.error('[roomcraft] no usable index.html in the package (need one with a script src and #root)');
     return win;
   }
   console.log(`[roomcraft] loading ${index}`);
@@ -79,7 +100,38 @@ app.on('web-contents-created', (_e, contents) => {
 // On Windows an Electron (GUI subsystem) process has no console attached, so
 // stdout from the main process is not visible to the CI shell. The result is
 // therefore written to a file that the workflow reads back.
-if (process.argv.includes('--selftest')) {
+// `--screenshot <path>` opens the real window and captures it with
+// Electron's own capturePage(), then exits. Lets a build pipeline prove the
+// app renders real pixels: external screen-grab tools cannot be trusted here
+// (PrintWindow misses GPU-composited surfaces, and Windows blocks
+// SetForegroundWindow from background processes, so both capture the
+// wrong window).
+async function captureScreenshot(outPath) {
+  const win = createWindow();
+  if (win.webContents.isLoading()) {
+    await new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+  }
+  // Let React mount and the first paint settle.
+  await new Promise((r) => setTimeout(r, 3500));
+  const img = await win.webContents.capturePage();
+  fs.writeFileSync(outPath, img.toPNG());
+  return outPath;
+}
+
+const shotArg = process.argv.indexOf('--screenshot');
+if (shotArg !== -1) {
+  const outPath = process.argv[shotArg + 1];
+  app.whenReady().then(async () => {
+    try {
+      await captureScreenshot(outPath);
+      console.log(`SCREENSHOT OK: ${outPath}`);
+      app.exit(0);
+    } catch (e) {
+      console.error(`SCREENSHOT FAIL: ${e.message}`);
+      app.exit(1);
+    }
+  });
+} else if (process.argv.includes('--selftest')) {
   const fsSync = require('fs');
   const outPath = process.env.RC_SELFTEST_OUT;
   const report = (msg) => {
@@ -166,12 +218,35 @@ if (process.argv.includes('--selftest')) {
     }
     if (errors.length) problems.push(`renderer errors: ${errors.slice(0, 5).join(' | ')}`);
 
+    // Pixel check: sample the rendered window. A blank page yields a couple of
+    // colours; a real UI yields many. This catches assets that fail to load
+    // under file:// even when the DOM happened to have children.
+    let colours = -1;
+    try {
+      const img = await win.webContents.capturePage();
+      const size = img.getSize();
+      const bmp = img.toBitmap(); // BGRA
+      const seen = new Set();
+      const strideX = Math.max(1, Math.floor(size.width / 80));
+      const strideY = Math.max(1, Math.floor(size.height / 80));
+      for (let y = 0; y < size.height; y += strideY) {
+        for (let x = 0; x < size.width; x += strideX) {
+          const i = (y * size.width + x) * 4;
+          seen.add((bmp[i] << 24) | (bmp[i + 1] << 16) | (bmp[i + 2] << 8) | bmp[i + 3]);
+        }
+      }
+      colours = seen.size;
+      if (colours < 20) problems.push(`window looks blank (only ${colours} distinct colours sampled)`);
+    } catch (e) {
+      problems.push(`capturePage failed: ${e.message}`);
+    }
+
     if (problems.length) return fail(problems.join('; '));
 
     report(
       `SELFTEST OK: index=${index}; readyState=${state.ready}; ` +
         `#root children=${state.rootChildren} htmlLen=${state.rootHtmlLen}; ` +
-        `body="${state.bodyText.replace(/\s+/g, ' ')}"`,
+        `sampledColours=${colours}; body="${state.bodyText.replace(/\s+/g, ' ')}"`,
     );
     app.exit(0);
   });
