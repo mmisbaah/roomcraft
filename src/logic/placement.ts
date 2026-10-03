@@ -196,6 +196,15 @@ export function canPlace(
 }
 
 /** Like canPlace but skips door-approach clearance — for manual fine moves. */
+/**
+ * Manual-move validity (drag, arrow keys, nudge pad).
+ *
+ * Deliberately ignores the door-approach clearance and the 0.25 m placement
+ * grid: those exist to make the AI's layout look right, but a person moving a
+ * piece by hand should not be blocked by them. Walls and other furniture are
+ * still enforced via the room polygon, which is also what keeps the door zone
+ * itself navigable.
+ */
 export function canPlaceManual(
   grid: Grid,
   poly: Vec2[],
@@ -207,48 +216,14 @@ export function canPlaceManual(
   rot: number,
   excludeUid?: string,
 ): boolean {
-  if (item.mount === 'wall') {
-    return rotRectInsidePoly(poly, x, y, item.w, item.d, rot);
-  }
-  if (item.mount === 'ceiling') {
-    return rotRectInsidePoly(poly, x, y, item.w, item.d, rot);
-  }
-  if (item.mount === 'surface') {
-    if (supportAt(items, byId, x, y) != null) {
-      return rotRectInsidePoly(poly, x, y, item.w, item.d, rot);
-    }
-  }
-  const { w, d } = rotatedSize(item.w, item.d, rot);
-  const cells = rectCells(grid, x, y, w, d);
-  if (!cells) return false;
-  const flat = isFlat(item);
-  const others = items.filter((i) => i.uid !== excludeUid && !isFlat(byId.get(i.itemId) ?? item));
-  for (const idx of cells) {
-    // Skip door-approach blocked cells for manual moves
-    if (grid.free[idx] === 0) {
-      // Check if this cell is blocked ONLY by door approach (heuristic: cell center near door)
-      const cellCenter = { x: grid.ox + (idx % grid.cols + 0.5) * grid.cell, y: grid.oy + (Math.floor(idx / grid.cols) + 0.5) * grid.cell };
-      let nearDoor = false;
-      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-        if ((poly[i].x === poly[j].x || poly[i].y === poly[j].y)) continue; // skip non-axis-aligned
-        const mid = { x: (poly[i].x + poly[j].x) / 2, y: (poly[i].y + poly[j].y) / 2 };
-        if (Math.hypot(cellCenter.x - mid.x, cellCenter.y - mid.y) < 1.2) { nearDoor = true; break; }
-      }
-      if (!nearDoor) return false;
-    }
-    if (flat) continue;
-    for (const o of others) {
-      const f = byId.get(o.itemId);
-      if (!f || !blocksFloor(f) || overlapsAllowed(item, f)) continue;
-      const os = rotatedSize(f.w, f.d, o.rot);
-      const oc = rectCells(grid, o.x, o.y, os.w, os.d);
-      if (oc && oc.indexOf(idx) !== -1) return false;
-    }
-  }
-  return true;
+  return canPlaceRaw(grid, poly, items, byId, item, x, y, rot, excludeUid);
 }
 
-/** Minimal checks for drag — no door clearance, no grid snap, just walls + collision. */
+/**
+ * Minimal checks for drag — no door clearance, no grid snap, just walls +
+ * collision. Used by tryMoveRaw so dragging feels free while still refusing
+ * to drop furniture through a wall or inside another piece.
+ */
 export function canPlaceRaw(
   grid: Grid,
   poly: Vec2[],
@@ -271,24 +246,21 @@ export function canPlaceRaw(
       return rotRectInsidePoly(poly, x, y, item.w, item.d, rot);
     }
   }
+  // Rotated footprint must sit wholly inside the room. `rot` must be passed:
+  // omitting it makes every corner NaN and the test always fails.
   const { w, d } = rotatedSize(item.w, item.d, rot);
-  const cells = rectCells(grid, x, y, w, d);
-  if (!cells) return false;
-  const flat = isFlat(item);
-  const others = items.filter((i) => i.uid !== excludeUid && !isFlat(byId.get(i.itemId) ?? item));
-  for (const idx of cells) {
-    // Only reject cells that are walls/outside (not door approach)
-    // We approximate: if free[idx] === 0, check if it's a door cell
-    // Simpler: just check wall collision via rectCells already does this
-    // grid.free includes door approach as blocked, so we need a different approach
-    // For raw drag, just use polygon containment + item collision
-    // Skip the grid entirely for raw moves
-  }
-  // Fallback: just polygon containment + item collision (no grid)
-  if (!rotRectInsidePoly(poly, x, y, w, d)) return false;
-  for (const o of others) {
+  if (!rotRectInsidePoly(poly, x, y, w, d, rot)) return false;
+
+  // Footprint must stay within the grid's extent (rectCells is null when it
+  // pokes outside); the grid is not consulted for free/blocked because the
+  // door-approach zone is deliberately ignored during manual moves.
+  if (!rectCells(grid, x, y, w, d)) return false;
+
+  if (isFlat(item)) return true;
+  for (const o of items) {
+    if (o.uid === excludeUid) continue;
     const f = byId.get(o.itemId);
-    if (!f || !blocksFloor(f) || overlapsAllowed(item, f)) continue;
+    if (!f || isFlat(f) || !blocksFloor(f) || overlapsAllowed(item, f)) continue;
     const os = rotatedSize(f.w, f.d, o.rot);
     const dx = Math.abs(x - o.x);
     const dy = Math.abs(y - o.y);
