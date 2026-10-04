@@ -1,4 +1,4 @@
-// 📐 The 149 design rules behind AI Fill.
+// 📐 The 152 design rules behind AI Fill.
 //
 // This is RoomCraft's interior-design knowledge base: every rule the product
 // ships with, grouped by room type. `RULES` is surfaced verbatim in the
@@ -1043,6 +1043,29 @@ export const RULES: DesignRule[] = [
     group: 'finishing',
     title: 'Repeat materials',
     text: 'Repeat shapes, colors, or materials throughout the room to create rhythm and unity.',
+  },
+
+  // 📐 Added from the written room rules (150–152)
+  {
+    id: 150,
+    group: 'finishing',
+    title: 'Space ceiling lights 3 m apart',
+    text: 'Lay the ceiling out on a 3 m lattice: every light at least 3 m from every other, with the same distance left to the walls. This is the same as one light per 9 m², but stated as a spacing it is the version that can actually be built — a 3 × 3 m room has 9 m² and so "wants" two lights, when there is only room for one.',
+    applied: true,
+  },
+  {
+    id: 151,
+    group: 'general',
+    title: 'Limit chairs outside the dining room',
+    text: 'At most two chairs in any room other than a dining room. A dining room is exempt because the table is meant to have four chairs around it; everywhere else, seating is the sofa plus a couple of chairs, and a fourth chair is one more thing to walk around.',
+    applied: true,
+  },
+  {
+    id: 152,
+    group: 'general',
+    title: 'One of each kind in a room',
+    text: 'No two pieces of the same kind in a room — two differently named side tables are still two side tables. The exceptions are chairs, ceiling lights, built-in joinery runs (a kitchen is made of cabinets, and one base unit is not a kitchen) and paired decor such as cushions and sconces.',
+    applied: true,
   },
 ];
 

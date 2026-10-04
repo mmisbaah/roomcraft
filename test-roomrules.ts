@@ -9,13 +9,15 @@ import './test-dom-stub';
 import { useStore } from './src/store';
 import { LIBRARY } from './src/data/items';
 import {
+  CHAIR_LIMIT,
   CHAIR_WALK_SPACE,
+  CEILING_LIGHT_SPACING,
   DUPLICATE_FREE_AREA_MAX,
-  ceilingLightsFor,
-  CEILING_LIGHT_AREA,
+  ROOM_KIND_ORDER,
+  ceilingLightGrid,
   type RoomKind,
 } from './src/logic/placement';
-import { isFlat } from './src/logic/placement';
+import { isFlat, REPEAT_EXEMPT } from './src/logic/placement';
 import { isCabinet, isChair, isTable } from './src/logic/roomrules';
 import type { FurnItem, PlacedItem } from './src/types';
 import { distPointSeg } from './src/logic/geometry';
@@ -73,15 +75,33 @@ const front = (rot: number) => {
   return { x: Math.sin(r), y: -Math.cos(r) };
 };
 
-console.log('Rule 7 — one ceiling light per 9 square metres:');
+console.log('Rule 1 — ceiling lights on a 3 m lattice:');
 {
-  ok('the area per light is 9 m2', CEILING_LIGHT_AREA === 9,
-    `${CEILING_LIGHT_AREA} m2`);
-  ok('a 22.5 m2 room gets 3 fittings', ceilingLightsFor(22.5) === 3,
-    `${ceilingLightsFor(22.5)}`);
-  ok('a 120 m2 room gets 14 fittings', ceilingLightsFor(120) === 14,
-    `${ceilingLightsFor(120)}`);
-  ok('a small room still gets at least one', ceilingLightsFor(4) === 1, `${ceilingLightsFor(4)}`);
+  const rect = (w: number, h: number) =>
+    ceilingLightGrid([
+      { x: 0, y: 0 },
+      { x: w, y: 0 },
+      { x: w, y: h },
+      { x: 0, y: h },
+    ]);
+  ok('the lattice spacing is 3 m', CEILING_LIGHT_SPACING === 3, `${CEILING_LIGHT_SPACING} m`);
+  ok('a 3x3 m room holds one light', rect(3, 3).length === 1, `${rect(3, 3).length}`);
+  ok('a 6 m wall holds two lights 3 m apart', rect(6, 3).length === 2, `${rect(6, 3).length}`);
+  ok('a 5 m wall holds one, not two squeezed together', rect(5, 4.5).length === 1,
+    `${rect(5, 4.5).length}`);
+  ok('a 12x10 m room holds twelve', rect(12, 10).length === 12, `${rect(12, 10).length}`);
+  // Every pair of lattice points must be at least the spacing apart.
+  let tightest = Infinity;
+  for (const [w, h] of [[3.2, 3], [5, 4.5], [7, 6.9], [12, 10], [9, 3]] as [number, number][]) {
+    const pts = rect(w, h);
+    for (let a = 0; a < pts.length; a++) {
+      for (let b = a + 1; b < pts.length; b++) {
+        tightest = Math.min(tightest, Math.hypot(pts[a].x - pts[b].x, pts[a].y - pts[b].y));
+      }
+    }
+  }
+  ok('no two lattice points are closer than 3 m', tightest >= CEILING_LIGHT_SPACING - 1e-9,
+    `tightest ${tightest.toFixed(2)} m`);
 
   for (const [label, w, h] of [
     ['small', 3.2, 3.0],
@@ -91,9 +111,75 @@ console.log('Rule 7 — one ceiling light per 9 square metres:');
   ] as [string, number, number][]) {
     const r = fill('living', w, h);
     const got = r.defs.filter((d) => d.mount === 'ceiling' && d.type === 'ceilight').length;
-    const want = ceilingLightsFor(r.area);
-    ok(`${label} living room has ${want} ceiling lights`, got >= want, `${got} placed`);
+    const want = ceilingLightGrid(r.poly).length;
+    ok(`${label} living room has ${want} ceiling lights`, got === want, `${got} placed`);
+    // And they are actually 3 m apart, not merely the right number of them.
+    const pts = r.items
+      .filter((i) => r.defs[r.items.indexOf(i)]?.type === 'ceilight')
+      .map((i) => ({ x: i.x, y: i.y }));
+    let tight = Infinity;
+    for (let a = 0; a < pts.length; a++) {
+      for (let b = a + 1; b < pts.length; b++) {
+        tight = Math.min(tight, Math.hypot(pts[a].x - pts[b].x, pts[a].y - pts[b].y));
+      }
+    }
+    ok(`  …${label} lights are 3 m apart`, tight === Infinity || tight >= 3 - 1e-9,
+      tight === Infinity ? 'single light' : `closest ${tight.toFixed(2)} m`);
   }
+}
+
+console.log('\nRule 2 — at most two chairs outside the dining room:');
+{
+  let worst = 0;
+  let over: string[] = [];
+  for (const kind of ROOM_KIND_ORDER) {
+    for (const [label, w, h] of [
+      ['small', 3.2, 3.0],
+      ['medium', 5.0, 4.5],
+      ['large', 7.0, 6.9],
+    ] as [string, number, number][]) {
+      const r = fill(kind, w, h);
+      const n = r.defs.filter((d) => isChair(d)).length;
+      if (n > worst) worst = n;
+      // The dining room is exempt: rule 4 puts four chairs around the table.
+      const limit = kind === 'dining' ? 4 : CHAIR_LIMIT;
+      if (n > limit) over.push(`${kind}/${label}=${n}`);
+    }
+  }
+  ok('no non-dining room exceeds the chair limit', over.length === 0, over.slice(0, 6).join(', '));
+  console.log(`       worst case ${worst} chairs (dining allowed four)`);
+}
+
+console.log('\nRule 3 — one of each kind in the room:');
+{
+  // Scoped to rooms where the rule binds: above 40 m² repeats are allowed so
+  // the coverage floor stays reachable.
+  const dupFree = ['living', 'bedroom', 'office', 'kitchen', 'bathroom', 'hallway', 'pantry'] as RoomKind[];
+  let bad: string[] = [];
+  for (const kind of dupFree) {
+    for (const [label, w, h] of [
+      ['small', 3.2, 3.0],
+      ['medium', 5.0, 4.5],
+    ] as [string, number, number][]) {
+      const r = fill(kind, w, h);
+      const seen = new Set<string>();
+      for (const d of r.defs) {
+        if (d.type === 'ceilight') continue;
+        if (isChair(d) || REPEAT_EXEMPT.has(d.kind)) continue;
+        const key = `${d.type}:${d.kind}`;
+        if (seen.has(key)) bad.push(`${kind}/${label} ${key}`);
+        seen.add(key);
+      }
+    }
+  }
+  ok('no kind appears twice in a duplicate-free room', bad.length === 0, bad.slice(0, 6).join(', '));
+  // The exemptions really do repeat, or a kitchen would be one base unit.
+  const kitchen = fill('kitchen', 5, 4.5);
+  const basecabs = kitchen.defs.filter((d) => d.kind === 'basecab').length;
+  ok('built-in joinery is exempt from the cap', basecabs >= 2, `${basecabs} base cabinets`);
+  const living = fill('living', 5, 4.5);
+  const cushions = living.defs.filter((d) => d.kind === 'pillow').length;
+  ok('paired decor is exempt from the cap', cushions >= 2, `${cushions} cushions`);
 }
 
 console.log('\nRule 5 — no duplicate furniture except chairs and cabinets:');

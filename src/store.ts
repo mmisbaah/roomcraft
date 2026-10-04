@@ -38,13 +38,16 @@ import {
   floorPieceLimit,
   isFlat,
   oddCount,
-  ceilingLightsFor,
+  ceilingLightGrid,
+  CHAIR_LIMIT,
+  CHAIR_LIMIT_EXEMPT,
+  REPEAT_EXEMPT,
   COVERAGE_FLOOR,
   DUPLICATE_FREE_AREA_MAX,
   type EdgeInfo,
   type PresetStep,
 } from './logic/placement';
-import { repeatable } from './logic/roomrules';
+import { isChair } from './logic/roomrules';
 import { activateLicense, getLicense, startCheckout } from './lib/checkout';
 import { CLEARANCE, RULES } from './logic/rules';
 import type {
@@ -1249,16 +1252,19 @@ export const useStore = create<AppState>((set, get) => ({
         ...(PRESETS[room.kind] ?? PRESETS.living),
         ...stepsFromNote(room.note, room.kind),
       ]);
-      // Rule 7 — one ceiling light per 9 square metres. These are the extra
-      // downlights; the feature fitting over the table or centre of the room is
-      // the one the presets already carry.
-      const lights = ceilingLightsFor(roomArea);
+      // Rule 1 — one ceiling light per 3 m of lattice, so the count is whatever the
+      // room's shape allows rather than an area calculation that ignores the
+      // walls. One lattice point is reserved for the feature fitting the
+      // presets already carry, which takes the point nearest the table it lights.
+      const lights = Math.max(0, ceilingLightGrid(room.poly).length - 1);
       // Recessed, so they read as a grid of downlights rather than competing
       // with the pendant the preset puts in. Repeats are allowed for ceiling
       // lights (see the duplicate rule below): the library holds two recessed
-      // fittings and rule 7 asks for up to fourteen.
+      // fittings and a large room's lattice has a dozen points.
       for (let i = 0; i < lights; i++) steps.push({ type: 'ceilight', kind: 'recessed' });
       const dupFree = roomArea <= DUPLICATE_FREE_AREA_MAX;
+      // Rule 2 — chairs are capped outside the dining room.
+      const chairCap = CHAIR_LIMIT_EXEMPT.includes(room.kind) ? Infinity : CHAIR_LIMIT;
       const edges = edgesOf(room.poly, room.openings, st.walls);
       const inRoom: PlacedItem[] = [];
 
@@ -1313,6 +1319,10 @@ export const useStore = create<AppState>((set, get) => ({
         // already in the room, so a repeated step can't stack identical pieces.
         const heldOf = (kind: string) =>
           inRoom.filter((it) => ITEM_INDEX.get(it.itemId)?.kind === kind).length;
+        // Rule 2 counts every chair, not chairs of one design: three dining
+        // chairs and an accent chair is still three chairs over the limit.
+        const heldChairs = () =>
+          inRoom.filter((it) => isChair(ITEM_INDEX.get(it.itemId)!)).length;
         const eligible = pool.filter((p) => {
           // capScale lets a big room repeat its anchors. "One sofa" is right for
           // a 22 m² living room and wrong for 120 m², where a second seating
@@ -1335,20 +1345,34 @@ export const useStore = create<AppState>((set, get) => ({
           // stack two identical sofas. The coverage top-up does allow it — a
           // second nightstand is correct, and refusing repeats there is what
           // left a large room unable to fill up at all.
-          if (allowRepeat) return true;
-          // Rule 7's downlights are the one thing a room is meant to repeat, so they are
-          // exempt from the no-duplicates rule in every room, not just the
-          // duplicate-free ones. The library holds two recessed fittings and
-          // rule 7 can ask for fourteen.
+          // Rule 2 — chairs, capped outside the dining room. This is checked before
+          // allowRepeat, which only waives the duplicate rules: the third chair
+          // is refused whether or not it is a different design, and the
+          // coverage top-up does not get to buy its way past a hard cap.
+          if (isChair(p) && heldChairs() >= chairCap) return false;
+          // The coverage top-up waives the duplicate rule only where repeats are allowed
+          // at all. In a duplicate-free room rule 3 still holds, because the two
+          // failure modes are not equal: a hallway with two console tables is
+          // something a person looks at and thinks is wrong, while missing the
+          // coverage target is a number nobody ever sees.
+          const repeatableHere =
+            isChair(p) || REPEAT_EXEMPT.has(p.kind) || step.type === 'ceilight';
+          if (allowRepeat && (repeatableHere || !dupFreeRoom)) return true;
+          // Rule 1's downlights are the one thing a room is meant to repeat, so
+          // they are exempt from the duplicate rule in every room, not just the
+          // duplicate-free ones.
           if (step.type === 'ceilight') return true;
           if (dupFreeRoom) {
-            // Rule 5 is about furniture. Two cushions on a sofa or a pair of
-            // sconces is normal; two identical side tables is not.
-            if (!FURNITURE_TYPES.has(p.type)) return true;
-            // The exceptions the rule allows.
-            if (repeatable(p)) return true;
-            // Duplicates are judged by kind, not by catalogue item: two different
-            // "Halo Side Table" rows are still two side tables.
+            // Rule 3 — one of each kind in the room. Judged by kind, not by
+            // catalogue item: two differently named "Halo Side Table" rows are
+            // still two side tables.
+            //
+            // Chairs and the exempt kinds may repeat outright, and they are
+            // exempt from the per-item rule as well as the per-kind one. A
+            // dining table is meant to have four chairs and the library holds
+            // two dining designs, so refusing to repeat the same row would cap
+            // the room at two chairs and break rule 4.
+            if (isChair(p) || REPEAT_EXEMPT.has(p.kind)) return true;
             const key = `${p.type}:${p.kind}`;
             const already = inRoom.some((it) => {
               const of = ITEM_INDEX.get(it.itemId);

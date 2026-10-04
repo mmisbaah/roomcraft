@@ -551,6 +551,37 @@ function findCeilingSpot(
     if (!free(sx, sy)) return null;
     return { x: sx, y: sy, rot: 0 };
   };
+  // Rule 1 — every ceiling light at least CEILING_LIGHT_SPACING from every other,
+  // so the whole ceiling is laid out on one 3 m lattice rather than each fitting
+  // finding its own spot.
+  //
+  // A recessed spot is ambient light and takes any free lattice point. A pendant
+  // or flush disc is the feature fitting and takes the lattice point nearest the
+  // table it lights — which is as close to over the table as the lattice allows.
+  // Letting a recessed spot take a table position instead put it on the side
+  // table beside the sofa, which is where a person puts a lamp.
+  //
+  // Lattice points are returned unsnapped: snapping to the 0.25 m placement grid
+  // is what would drag a light off its point and break the spacing.
+  if (item.type === 'ceilight') {
+    const lattice = ceilingLightGrid(poly);
+    if (lattice.length) {
+      const clear = (x: number, y: number) =>
+        !occ.some((o) => {
+          const of = byId.get(o.itemId)!;
+          return Math.hypot(o.x - x, o.y - y) < (of.w + item.w) / 2 + 0.4;
+        });
+      const anchor = item.kind === 'recessed' ? centroid : tables[0] ?? centroid;
+      const ordered = [...lattice].sort(
+        (a, b) => Math.hypot(a.x - anchor.x, a.y - anchor.y) - Math.hypot(b.x - anchor.x, b.y - anchor.y),
+      );
+      for (const g of ordered) {
+        if (!clear(g.x, g.y)) continue;
+        if (!rotRectInsidePoly(poly, g.x, g.y, item.w, item.d, 0)) continue;
+        return { x: g.x, y: g.y, rot: 0 };
+      }
+    }
+  }
   for (const t of tables) {
     const spot = tryPt(t.x, t.y);
     if (spot) return spot;
@@ -1713,19 +1744,76 @@ const TYPICAL_ROOM_AREA = 22.5;
 export const CHAIR_WALK_SPACE = 0.6;
 
 /**
- * One ceiling light per 9 square metres.
+ * Rule 1 — minimum distance between ceiling lights: 3 m.
  *
- * This was first written as 14 square *feet* and implemented literally, which
- * is 1.30 m² per fitting — eighteen downlights in a 22.5 m² room, and
- * ninety-three in a 120 m² one. Nine square metres is the sane reading of the
- * same rule and is what is used now: three fittings in a 22.5 m² room, which is
- * how a room is actually lit.
+ * This is the same rule as "one light per 9 square metres" (a 3 m lattice gives
+ * each fitting 9 m²), but stated as a spacing it is the version that can
+ * actually be built. The area form ignores the walls: a 3 × 3 m room has 9 m²
+ * and so "wants" two lights, when there is only room for one. The spacing form
+ * has no such problem, so the count follows the geometry rather than the
+ * arithmetic.
+ *
+ * ERCO's guidance for uniform general lighting is a spacing of up to 1.5× the
+ * height of the fitting above the working plane, with half that spacing left to
+ * the wall. At a 2.7 m ceiling that is about 4 m, so 3 m is a comfortable
+ * margin rather than the bare minimum.
  */
-export const CEILING_LIGHT_AREA = 9;
+export const CEILING_LIGHT_SPACING = 3;
 
-/** How many ceiling lights a room of this floor area gets. */
-export function ceilingLightsFor(area: number): number {
-  return Math.max(1, Math.ceil(area / CEILING_LIGHT_AREA));
+/**
+ * The lattice of ceiling-light positions for a room, in metres.
+ *
+ * Each axis is divided into as many 3 m spans as it will hold, and the fittings
+ * are spread evenly with equal gaps left at both ends. So a 6 m wall carries two
+ * lights 1.5 m in from each end and 4.5 m from the other, and a 5 m wall
+ * carries one in the middle rather than two squeezed together.
+ *
+ * The lattice is laid out over the room's bounding box and then clipped to the
+ * room itself, so an L-shaped plan gets lights in the parts of the grid it
+ * actually covers and none in the notch.
+ */
+export function ceilingLightGrid(poly: Vec2[]): Vec2[] {
+  if (poly.length < 3) return [];
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const p of poly) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+
+  const axis = (lo: number, span: number): number[] => {
+    const n = Math.max(1, Math.floor(span / CEILING_LIGHT_SPACING));
+    if (n === 1) return [lo + span / 2];
+    const margin = (span - (n - 1) * CEILING_LIGHT_SPACING) / 2;
+    const out: number[] = [];
+    for (let i = 0; i < n; i++) out.push(lo + margin + i * CEILING_LIGHT_SPACING);
+    return out;
+  };
+
+  const xs = axis(minX, maxX - minX);
+  const ys = axis(minY, maxY - minY);
+  const pts: Vec2[] = [];
+  for (const x of xs) {
+    for (const y of ys) {
+      if (pointInPoly({ x, y }, poly)) pts.push({ x, y });
+    }
+  }
+  // A room too shallow or too oddly shaped to contain a lattice point still
+  // gets one light, at its centre.
+  if (!pts.length) {
+    const c = polyCentroid(poly);
+    pts.push({ x: c.x, y: c.y });
+  }
+  return pts;
+}
+
+/** How many ceiling lights a room of this shape gets. */
+export function ceilingLightsFor(poly: Vec2[]): number {
+  return ceilingLightGrid(poly).length;
 }
 
 /**
@@ -1736,6 +1824,44 @@ export function ceilingLightsFor(area: number): number {
  * furniture, so the coverage floor could never be met.
  */
 export const DUPLICATE_FREE_AREA_MAX = 40;
+
+/**
+ * Rule 2 — at most this many chairs, in any room but a dining room.
+ *
+ * A dining room is exempt because rule 4 puts four chairs around the table, and
+ * because a table with two chairs is a bench with a table on it. Everywhere
+ * else, seating is the sofa plus a couple of chairs, and a fourth chair in an
+ * office or a library is one more thing to walk around.
+ */
+export const CHAIR_LIMIT = 2;
+
+/** Rooms the chair limit does not apply to. */
+export const CHAIR_LIMIT_EXEMPT: RoomKind[] = ['dining'];
+
+/**
+ * Rule 3 — the kinds allowed to appear more than once in a room, beyond chairs
+ * (rule 2) and ceiling lights (rule 1).
+ *
+ * Two groups earn the exemption. Built-in joinery is exempt because a kitchen
+ * *is* cabinets: capping a 16 m² kitchen at one base unit and one wall unit
+ * would leave it unable to hold a sink and a hob, which is not a kitchen with
+ * sparse cupboards but a different room. Paired decor is exempt because a pair
+ * is the design — one cushion on a sofa reads as an oversight, and a single
+ * sconce lights one side of a room and leaves the other dark.
+ */
+export const REPEAT_EXEMPT = new Set([
+  // Built-in joinery runs.
+  'basecab',
+  'wallcab',
+  'pantrycab',
+  'pantryshelf',
+  'laundrycab',
+  'laundrywall',
+  'drawerbank',
+  // Paired decor.
+  'pillow',
+  'sconce',
+]);
 
 /**
  * Floor-piece allowance for a room of this kind and size.
