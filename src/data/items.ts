@@ -894,6 +894,35 @@ const CLOSET = build('closet', 'floor', { c: [...WOOD, ...METAL, ...LIGHT], a: [
   { n: 'Hook Rail', k: 'closethook', s: 'Metal', w: 0.7, d: 0.06, h: 0.16, m: 'wall', sp: { shape: 'wallflat', hooks: 5 } },
 ]);
 
+// ------------------------------------------------------------------- doors
+// Doors used to be nothing but an edge *kind*: one gap, one pair of jambs, and
+// every opening in every plan looked the same. These are real objects with
+// real differences — how they swing, how much floor they give back, whether
+// they are glazed. Mount is 'wall' and the footprint depth is the leaf
+// thickness, so a door sits in an opening the way it would on site.
+const DOORS = build('doors', 'wall', { c: [...WOOD, ...LIGHT, ...WOOD_DARK], a: [...BRASS, ...METAL, ...WOOD_DARK] }, [
+  { n: 'Single Swing Door', k: 'single', s: 'Classic', w: 0.9, d: 0.05, h: 2.05, sp: { leaves: 1, swing: 'left', panel: 2 } },
+  { n: 'Single Door, Hinged Right', k: 'single', s: 'Modern', w: 0.9, d: 0.05, h: 2.05, sp: { leaves: 1, swing: 'right', flush: true } },
+  { n: 'Double Swing Door', k: 'double', s: 'Classic', w: 1.6, d: 0.05, h: 2.05, sp: { leaves: 2, panel: 2 } },
+  { n: 'Double Door, Hinged Left', k: 'double', s: 'Contemporary', w: 1.5, d: 0.05, h: 2.05, sp: { leaves: 2, flush: true, swing: 'left' } },
+  { n: 'French Door', k: 'french', s: 'Classic', w: 1.5, d: 0.06, h: 2.1, sp: { leaves: 2, glazing: 15 } },
+  { n: 'Sliding Patio Door', k: 'sliding', s: 'Contemporary', w: 2.4, d: 0.08, h: 2.1, sp: { leaves: 2, glazing: 18, slider: true } },
+  { n: 'Pocket Door', k: 'pocket', s: 'Minimalist', w: 0.8, d: 0.05, h: 2.05, sp: { leaves: 1, panel: 1, pocket: true } },
+  { n: 'Double Pocket Door', k: 'pocket2', s: 'Minimalist', w: 1.5, d: 0.05, h: 2.05, sp: { leaves: 2, panel: 1, pocket: true } },
+  { n: 'Bi-fold Door', k: 'bifold', s: 'Modern', w: 1.2, d: 0.05, h: 2.05, sp: { leaves: 2, panel: 1, fold: true } },
+  { n: 'Concertina Door', k: 'concertina', s: 'Industrial', w: 2.0, d: 0.05, h: 2.05, sp: { leaves: 4, panel: 1, fold: true, industrial: true } },
+  { n: 'Glass Panel Door', k: 'glass', s: 'Contemporary', w: 0.9, d: 0.05, h: 2.05, sp: { leaves: 1, glazing: 12, flush: true } },
+  { n: 'Glazed Fire Door', k: 'fire', s: 'Commercial', w: 0.9, d: 0.06, h: 2.05, sp: { leaves: 1, glazing: 6, pushbar: true } },
+  { n: 'Barn Door', k: 'barn', s: 'Rustic', w: 1.2, d: 0.07, h: 2.1, sp: { leaves: 1, panel: 4, track: true } },
+  { n: 'Dutch Door', k: 'dutch', s: 'Colonial', w: 0.9, d: 0.06, h: 2.05, sp: { leaves: 1, panel: 3, split: true } },
+  { n: 'Pivot Entry Door', k: 'pivot', s: 'Modern', w: 1.2, d: 0.07, h: 2.4, sp: { leaves: 1, glazing: 20, pivot: true } },
+  { n: 'Loft Door', k: 'loft', s: 'Industrial', w: 0.9, d: 0.06, h: 2.05, sp: { leaves: 1, panel: 4, industrial: true } },
+  { n: 'Single Garage Door', k: 'garage', s: 'Commercial', w: 2.4, d: 0.08, h: 2.1, sp: { leaves: 1, panel: 4, ribs: true, industrial: true } },
+  { n: 'Double Garage Door', k: 'garage2', s: 'Commercial', w: 4.2, d: 0.08, h: 2.1, sp: { leaves: 2, panel: 4, ribs: true, industrial: true } },
+  { n: 'Interior Flush Door', k: 'flush', s: 'Plain', w: 0.8, d: 0.04, h: 2.04, sp: { leaves: 1, flush: true } },
+  { n: 'Reveal Door', k: 'reveal', s: 'Contemporary', w: 0.9, d: 0.05, h: 2.05, sp: { leaves: 1, reveal: true } },
+]);
+
 export const LIBRARY: FurnItem[] = [
   ...SEATING, ...TABLES, ...STORAGE, ...BEDS,
   ...CEILING, ...WALLLIGHT, ...LAMPS, ...ARCH,
@@ -902,6 +931,7 @@ export const LIBRARY: FurnItem[] = [
   ...KITCHEN, ...DINING,
   ...VANITY, ...BATHTUB, ...SHOWER, ...TOILET, ...TOWELRACK, ...VAMIRROR,
   ...NURSERY, ...GYM, ...LAUNDRY, ...OFFICE, ...PANTRY, ...OUTDOOR, ...CLOSET,
+  ...DOORS,
 ];
 
 export const ITEM_INDEX: Map<string, FurnItem> = new Map(LIBRARY.map((i) => [i.id, i]));

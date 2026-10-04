@@ -160,6 +160,14 @@ export interface AppState {
   /** Free-built partitions (🧱 tool), independent of the room outline. */
   walls: BuiltWall[];
   wallBuild: boolean;
+  /**
+   * Armed by the "Create room" button: the next drag on the ground lays out a
+   * room as a plain rectangle. A room does not need walls — the walls are
+   * decoration on the outline — and this is the direct way to say "make me a
+   * room here" instead of tapping each corner and then tapping the first one
+   * again to close the loop.
+   */
+  roomCreate: boolean;
   /** Chain of snapped points for the wall currently being drawn. */
   wallDraft: Vec2[] | null;
   /**
@@ -198,6 +206,7 @@ export interface AppState {
   askRoom: (id: string | null) => void;
   /** Add a room from a closed outline and make it active. */
   addRoom: (poly: Vec2[], openings?: EdgeKind[]) => boolean;
+  setRoomCreate: (v: boolean) => void;
   /** Delete a room along with everything inside it. */
   removeRoom: (id: string) => void;
   setEdgeEdit: (v: boolean) => void;
@@ -471,6 +480,7 @@ export const useStore = create<AppState>((set, get) => ({
   edgeEdit: false,
   walls: [],
   wallBuild: false,
+  roomCreate: false,
   wallDraft: null,
   wallGrab: null,
   wallRef: null,
@@ -493,7 +503,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({
       mode: m,
       selected: m === '3d' ? null : st.selected,
-      ...(m === '3d' ? { wallBuild: false, wallDraft: null, wallGrab: null, wallRef: null } : {}),
+      ...(m === '3d' ? { wallBuild: false, roomCreate: false, wallDraft: null, wallGrab: null, wallRef: null } : {}),
     });
   },
   setTier: (t) => set({ tier: t }),
@@ -539,6 +549,9 @@ export const useStore = create<AppState>((set, get) => ({
    */
   addRoom: (poly, openings) => {
     const st = get();
+    // Disarm either way: a rejected outline should not leave the tool armed to
+    // fail again on the next drag.
+    if (st.roomCreate) set({ roomCreate: false });
     const clean = cleanPolygon(poly);
     if (!clean) {
       toast(get, set, 'That loop is too small to be a room — aim for at least 4 m².');
@@ -572,6 +585,12 @@ export const useStore = create<AppState>((set, get) => ({
     return true;
   },
 
+  setRoomCreate: (v) => {
+    // Arming this means drawing a floor, not walls, and the two tools would
+    // otherwise fight over the same gesture.
+    set(v ? { roomCreate: true, wallBuild: false, draft: null, selected: null } : { roomCreate: false });
+  },
+
   removeRoom: (id) => {
     const st = get();
     const rooms = st.rooms.filter((r) => r.id !== id);
@@ -592,7 +611,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   setEdgeEdit: (v) => {
     if (v && get().wallDraft) get().finishWallDraft();
-    set(v ? { edgeEdit: true, wallBuild: false, wallDraft: null, wallGrab: null, wallRef: null } : { edgeEdit: false });
+    set(v ? { edgeEdit: true, wallBuild: false, roomCreate: false, wallDraft: null, wallGrab: null, wallRef: null } : { edgeEdit: false });
   },
 
   // -------------------------------------------------------------- 🧱 walls
@@ -601,8 +620,8 @@ export const useStore = create<AppState>((set, get) => ({
     if (!v && get().wallDraft) get().finishWallDraft();
     set(
       v
-        ? { wallBuild: true, wallDraft: null, wallGrab: null, wallRef: null, edgeEdit: false, selected: null }
-        : { wallBuild: false, wallDraft: null, wallGrab: null, wallRef: null },
+        ? { wallBuild: true, roomCreate: false, wallDraft: null, wallGrab: null, wallRef: null, edgeEdit: false, selected: null }
+        : { wallBuild: false, roomCreate: false, wallDraft: null, wallGrab: null, wallRef: null },
     );
   },
   addWallPoint: (p) => {

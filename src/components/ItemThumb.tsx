@@ -2271,6 +2271,172 @@ const CLOSET_SHAPES: Record<string, Shape> = {
   basketbin: BinArt,
 };
 
+// --- doors ------------------------------------------------------------------
+// All twenty read as the same silhouette — a frame with leaves in it — because
+// that is what makes a door recognisable at thumbnail size. What differs is
+// drawn inside the frame: glazing, a fold line, a track, a push bar.
+
+function DoorArt({ p, w }: ShapeProps) {
+  const wide = Math.min(74, 34 + w * 24);
+  const x = (120 - wide) / 2;
+  const top = 14;
+  const bot = 74;
+  return (
+    <>
+      {/* frame */}
+      <rect x={x} y={top} width={wide} height={bot - top} fill="#e8e3d9" opacity={0.5} />
+      <rect x={x} y={top} width={wide} height={bot - top} fill="none" stroke={p.dark} strokeWidth={4} />
+      {/* leaves */}
+      <rect x={x + 3} y={top + 4} width={wide - 6} height={bot - top - 8} fill={p.main} stroke={stroke(p)} />
+      {/* panel lines */}
+      {[0.34, 0.66].map((f) => (
+        <rect key={f} x={x + 7} y={top + (bot - top) * f - 1} width={wide - 14} height={2} fill={p.light} opacity={0.9} />
+      ))}
+      <rect x={60} y={top + 6} width={2} height={bot - top - 12} fill={p.dark} opacity={0.6} />
+      {/* handle */}
+      <circle cx={x + wide - 10} cy={44} r={2.6} fill="#c9a227" />
+    </>
+  );
+}
+
+function GlazedDoorArt({ p, w, d }: ShapeProps) {
+  const wide = Math.min(74, 34 + w * 24);
+  const x = (120 - wide) / 2;
+  return (
+    <>
+      <DoorArt p={p} w={w} d={d} />
+      <rect x={x + 9} y={20} width={wide - 18} height={40} fill="#cfe3f0" opacity={0.85} />
+      <rect x={x + 9} y={20} width={wide - 18} height={40} fill="none" stroke={p.dark} strokeWidth={1.6} />
+      <rect x={x + (wide - 18) / 2 + 6} y={20} width={2} height={40} fill={p.dark} opacity={0.7} />
+    </>
+  );
+}
+
+function SlidingDoorArt({ p, w }: ShapeProps) {
+  const wide = Math.min(96, 48 + w * 20);
+  const x = (120 - wide) / 2;
+  return (
+    <>
+      <rect x={x} y={14} width={wide} height={60} fill="none" stroke={p.dark} strokeWidth={4} />
+      <rect x={x + 5} y={18} width={wide / 2 - 6} height={52} fill={p.main} stroke={stroke(p)} />
+      <rect x={x + wide / 2 + 1} y={18} width={wide / 2 - 6} height={52} fill={p.light} stroke={stroke(p)} />
+      <rect x={x + 7} y={22} width={wide / 2 - 10} height={34} fill="#cfe3f0" opacity={0.8} />
+      <rect x={x + wide / 2 + 3} y={22} width={wide / 2 - 10} height={34} fill="#cfe3f0" opacity={0.8} />
+      <rect x={x} y={12} width={wide} height={4} rx={2} fill="#8a8f99" />
+      <circle cx={x + wide / 2 + 4} cy={50} r={2.4} fill="#c9a227" />
+    </>
+  );
+}
+
+function BarnDoorArt({ p, w }: ShapeProps) {
+  const wide = Math.min(80, 40 + w * 22);
+  const x = (120 - wide) / 2;
+  return (
+    <>
+      <rect x={x - 6} y={10} width={wide + 12} height={5} rx={2.5} fill="#4a4f57" />
+      {[0.25, 0.5, 0.75].map((f) => (
+        <rect key={f} x={x + 4} y={20 + f * 46} width={wide - 8} height={2.4} fill={p.dark} opacity={0.7} />
+      ))}
+      <rect x={x} y={18} width={wide} height={54} fill={p.main} stroke={stroke(p)} />
+      <rect x={x + 6} y={24} width={3} height={12} fill="#8a8f99" />
+      <rect x={x + wide - 9} y={24} width={3} height={12} fill="#8a8f99" />
+      <circle cx={x + wide - 8} cy={52} r={2.8} fill="#c9a227" />
+      <path d={`M${x - 6} 22 h6 M${x + wide} 22 h6`} stroke="#4a4f57" strokeWidth={3} />
+    </>
+  );
+}
+
+function RibbedDoorArt({ p, w }: ShapeProps) {
+  const wide = Math.min(96, 48 + w * 18);
+  const x = (120 - wide) / 2;
+  return (
+    <>
+      <rect x={x} y={14} width={wide} height={60} fill="none" stroke={p.dark} strokeWidth={4} />
+      <rect x={x + 3} y={17} width={wide - 6} height={54} fill={p.main} stroke={stroke(p)} />
+      {[0, 1, 2, 3].map((i) => (
+        <rect key={i} x={x + 7} y={22 + i * 12} width={wide - 14} height={5} rx={2.5} fill={p.light} opacity={0.85} />
+      ))}
+      {wide > 60 && <rect x={60} y={17} width={2} height={54} fill={p.dark} opacity={0.5} />}
+    </>
+  );
+}
+
+function PocketDoorArt({ p, w }: ShapeProps) {
+  const wide = Math.min(72, 36 + w * 24);
+  const x = (120 - wide) / 2;
+  return (
+    <>
+      {/* the wall the leaf slides into */}
+      <rect x={x} y={14} width={wide + 12} height={60} fill={p.dark} opacity={0.16} />
+      <rect x={x} y={14} width={wide + 12} height={60} fill="none" stroke={p.dark} strokeWidth={3} strokeDasharray="5 4" />
+      <rect x={x + 4} y={19} width={wide - 8} height={50} fill={p.main} stroke={stroke(p)} />
+      <rect x={x + 8} y={26} width={wide - 16} height={2} fill={p.light} />
+      <circle cx={x + wide - 9} cy={44} r={2.6} fill="#c9a227" />
+      <path d={`M${x + 4} 15 h${wide - 8}`} stroke="#8a8f99" strokeWidth={2} strokeDasharray="3 3" />
+    </>
+  );
+}
+
+function FoldDoorArt({ p, w }: ShapeProps) {
+  const wide = Math.min(78, 40 + w * 22);
+  const x = (120 - wide) / 2;
+  return (
+    <>
+      <rect x={x} y={14} width={wide} height={60} fill="none" stroke={p.dark} strokeWidth={4} />
+      {[0, 1, 2, 3].map((i) => {
+        const lw = (wide - 8) / 4;
+        return (
+          <g key={i}>
+            <rect
+              x={x + 4 + i * lw}
+              y={18 + (i % 2) * 4}
+              width={lw - 1}
+              height={52 - (i % 2) * 8}
+              fill={i % 2 ? p.light : p.main}
+              stroke={stroke(p)}
+            />
+          </g>
+        );
+      })}
+    </>
+  );
+}
+
+function PushDoorArt({ p, w }: ShapeProps) {
+  const wide = Math.min(60, 34 + w * 22);
+  const x = (120 - wide) / 2;
+  return (
+    <>
+      <rect x={x} y={14} width={wide} height={60} fill="none" stroke={p.dark} strokeWidth={4} />
+      <rect x={x + 3} y={17} width={wide - 6} height={54} fill={p.main} stroke={stroke(p)} />
+      <rect x={x + 7} y={21} width={wide - 14} height={22} fill="#cfe3f0" opacity={0.85} />
+      <rect x={x + 7} y={48} width={wide - 14} height={20} fill="#cfe3f0" opacity={0.85} />
+      <rect x={x + 5} y={44} width={wide - 10} height={4} rx={2} fill="#8a8f99" />
+    </>
+  );
+}
+
+const DOOR_SHAPES: Record<string, Shape> = {
+  single: DoorArt,
+  double: DoorArt,
+  reveal: DoorArt,
+  flush: DoorArt,
+  french: GlazedDoorArt,
+  glass: GlazedDoorArt,
+  pivot: GlazedDoorArt,
+  fire: PushDoorArt,
+  sliding: SlidingDoorArt,
+  pocket: PocketDoorArt,
+  pocket2: PocketDoorArt,
+  bifold: FoldDoorArt,
+  concertina: FoldDoorArt,
+  barn: BarnDoorArt,
+  loft: RibbedDoorArt,
+  garage: RibbedDoorArt,
+  garage2: RibbedDoorArt,
+  dutch: DoorArt,
+};
+
 /**
  * Resolve the artwork for an item.
  *
@@ -2292,6 +2458,7 @@ export function resolveShape(item: FurnItem): Shape {
     pantry: PANTRY_SHAPES,
     outdoor: OUTDOOR_SHAPES,
     closet: CLOSET_SHAPES,
+    doors: DOOR_SHAPES,
     seating: {
       ...SEATING_WIDE,
       ...SEATING_ONE,
@@ -2371,6 +2538,7 @@ export function resolveShape(item: FurnItem): Shape {
     pantry: Cabinet,
     outdoor: Chair,
     closet: ShelvingArt,
+    doors: DoorArt,
   };
   return fallback[item.type] ?? Decor;
 }

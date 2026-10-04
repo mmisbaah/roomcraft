@@ -22,7 +22,7 @@ function StatusBar() {
   return (
     <footer className="statusbar">
       <span>
-        {mode === '3d' ? '🧊 3D view — drag orbits · scroll or pinch zoom · drag items to move · ↑↓←→ nudges' : mode === 'draw' ? '✏️ Draw mode — click corners, Enter closes' : wallBuild ? '🧱 Wall tool — walls align to the wall you start from · ✊ Grab moves the last point · click a wall to remove · Esc ends the chain' : '🪑 Furnish mode — drag items · ↑↓←→ nudges · R rotates · right-click / long-press for menu'}
+        {mode === '3d' ? '🧊 3D view — drag orbits · scroll or pinch zoom · drag items to move · ↑↓←→ nudges' : mode === 'draw' ? '✏️ Draw mode — ＋ Create room and drag out a floor, or click corners and Enter closes' : wallBuild ? '🧱 Wall tool — walls align to the wall you start from · ✊ Grab moves the last point · click a wall to remove · Esc ends the chain' : '🪑 Furnish mode — drag items · ↑↓←→ nudges · R rotates · right-click / long-press for menu'}
       </span>
       <span className="status-right">
         {area > 0 && <span>{area.toFixed(1)} m²</span>}

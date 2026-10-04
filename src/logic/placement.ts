@@ -71,6 +71,10 @@ export const PREFS: Record<FurnType, PlacePrefs> = {
   pantry: { wall: 1.1, center: 0.2, door: -1.2 },
   outdoor: { wall: 0.8, center: 0.5, door: -0.9 },
   closet: { wall: 1.05, center: 0.15, door: -1.2 },
+  // A door goes in an opening, so it wants to be flat against a wall and as far
+  // from the entrance path as the wall allows — the door values are the least
+  // negative of any category for exactly that reason.
+  doors: { wall: 1.0, center: 0.0, door: -0.5 },
 };
 
 /** Flat textiles (rugs, runners) — they don't block anything. */

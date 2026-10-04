@@ -132,6 +132,8 @@ export default function Canvas2D() {
    * from a drag that merely began near it.
    */
   const grabMoveRef = useRef<{ sx: number; sy: number; onPoint: boolean; moved: boolean } | null>(null);
+  /** Live outline of the room being laid out by the ＋ Create room tool. */
+  const roomRectRef = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   /** Active pointers — two fingers turn a gesture into pinch-zoom / two-finger pan. */
   const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const pinchRef = useRef<{
@@ -654,6 +656,37 @@ export default function Canvas2D() {
       ctx.lineJoin = 'miter';
     }
 
+    // ＋ Create room: the outline being dragged out, with its size in m² so the
+    // room can be judged before it exists.
+    const rr = roomRectRef.current;
+    if (rr) {
+      const x0 = Math.min(rr.x0, rr.x1);
+      const x1 = Math.max(rr.x0, rr.x1);
+      const y0 = Math.min(rr.y0, rr.y1);
+      const y1 = Math.max(rr.y0, rr.y1);
+      const ax = sx(x0);
+      const ay = sy(y0);
+      const aw = sx(x1) - ax;
+      const ah = sy(y1) - ay;
+      ctx.fillStyle = 'rgba(79,109,245,0.12)';
+      ctx.fillRect(ax, ay, aw, ah);
+      ctx.strokeStyle = '#4f6df5';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([9, 6]);
+      ctx.strokeRect(ax, ay, aw, ah);
+      ctx.setLineDash([]);
+      if (aw > 46 && ah > 20) {
+        const m2 = (x1 - x0) * (y1 - y0);
+        ctx.font = '600 13px system-ui, sans-serif';
+        ctx.fillStyle = '#1e293b';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${(x1 - x0).toFixed(1)} × ${(y1 - y0).toFixed(1)} m · ${m2.toFixed(1)} m²`, ax + aw / 2, ay + ah / 2);
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+      }
+    }
+
     // vertices (always in draw mode, in edge-edit mode too)
     if (!st.rooms.length || st.edgeEdit) {
       for (const shape of drawn) {
@@ -1016,6 +1049,14 @@ export default function Canvas2D() {
     }
     const p = toWorld(e);
 
+    // ＋ Create room: the whole gesture belongs to the new floor, so neither the
+    // wall tool nor corner-tapping gets a look in.
+    if (st.roomCreate) {
+      roomRectRef.current = { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+      draw();
+      return;
+    }
+
     // 🧱 wall tool takes priority over everything else.
     // Record the intended action now, but only commit it on a clean
     // pointer-up — dragging still pans the view.
@@ -1120,6 +1161,15 @@ export default function Canvas2D() {
     const p = toWorld(e);
     cursorRef.current = p;
 
+    // ＋ Create room: dragging out the outline.
+    const rr = roomRectRef.current;
+    if (rr && st.roomCreate) {
+      rr.x1 = p.x;
+      rr.y1 = p.y;
+      draw();
+      return;
+    }
+
     if (st.wallBuild) {
       // "Finish move" takes precedence over panning: while a point is held the
       // gesture belongs to that point, so the press carries it instead of
@@ -1185,6 +1235,32 @@ export default function Canvas2D() {
     const st = useStore.getState();
     clearLongPress();
     pointersRef.current.delete(e.pointerId);
+
+    // ＋ Create room: the drag becomes the floor.
+    const rr = roomRectRef.current;
+    roomRectRef.current = null;
+    if (rr) {
+      const x0 = Math.min(rr.x0, rr.x1);
+      const x1 = Math.max(rr.x0, rr.x1);
+      const y0 = Math.min(rr.y0, rr.y1);
+      const y1 = Math.max(rr.y0, rr.y1);
+      // A click rather than a drag is not a room — say so rather than
+      // rejecting a zero-area outline with a "too small" message.
+      if (x1 - x0 < 0.2 || y1 - y0 < 0.2) {
+        useStore.getState().toastMsg('Drag out the room — click and drag a rectangle.');
+        draw();
+        return;
+      }
+      st.addRoom([
+        { x: x0, y: y0 },
+        { x: x1, y: y0 },
+        { x: x1, y: y1 },
+        { x: x0, y: y1 },
+      ]);
+      draw();
+      return;
+    }
+
     if (pinchRef.current) {
       if (pointersRef.current.size < 2) pinchRef.current = null;
       if (pointersRef.current.size > 0) return; // remaining finger keeps its gesture
@@ -1281,7 +1357,10 @@ export default function Canvas2D() {
         hideCtxMenu();
         // Esc backs out one step: undo the held point's move before it gives up
         // the whole chain, so a mis-grab is one key away from being undone.
-        if (st.wallGrab) st.cancelWallGrab();
+        if (st.roomCreate) {
+          st.setRoomCreate(false);
+          roomRectRef.current = null;
+        } else if (st.wallGrab) st.cancelWallGrab();
         else if (st.wallDraft?.length) st.finishWallDraft();
         else if (st.wallBuild) st.setWallBuild(false);
         else if (st.draft) st.cancelDraft();
@@ -1299,15 +1378,17 @@ export default function Canvas2D() {
   }, [draw]);
 
   const st = useStore();
-  const cursorStyle = st.wallGrab
-    ? 'grabbing'
-    : st.wallBuild
-      ? 'crosshair'
-      : st.mode === 'draw' && !st.rooms.length
+  const cursorStyle = st.roomCreate
+    ? 'crosshair'
+    : st.wallGrab
+      ? 'grabbing'
+      : st.wallBuild
         ? 'crosshair'
-        : dragRef.current
-          ? 'grabbing'
-          : 'grab';
+        : st.mode === 'draw' && !st.rooms.length
+          ? 'crosshair'
+          : dragRef.current
+            ? 'grabbing'
+            : 'grab';
 
   return (
     <div className="canvas-wrap" ref={wrapRef}>

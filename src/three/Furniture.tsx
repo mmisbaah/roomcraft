@@ -3543,6 +3543,131 @@ function Accessory({ f }: { f: FurnItem }) {
   return <group>{parts}</group>;
 }
 
+/**
+ * Doors.
+ *
+ * A door is a frame, one or more leaves, and whatever makes it that kind of
+ * door — glazing, a fold, a track above, a push bar. All twenty share this
+ * builder so they stay in proportion with each other; the spec flags say what
+ * each one actually is.
+ */
+function Door({ f }: { f: FurnItem }) {
+  const { w, d } = f;
+  const sp = f.spec;
+  const c = f.color;
+  const a = f.accent;
+  const h = f.h || 2.05;
+  const parts: React.ReactNode[] = [];
+  const t = Math.max(d, 0.04);
+  const zf = t / 2;
+
+  // Frame: two jambs and a head. A pocket door's frame is wider than its leaf,
+  // because the leaf runs inside the wall — that difference is the whole point
+  // of a pocket door and it should be visible.
+  const frameW = sp.pocket ? w + 0.24 : w;
+  parts.push(box('jl', [0.07, h, t], [-frameW / 2 + 0.035, h / 2, 0], a));
+  parts.push(box('jr', [0.07, h, t], [frameW / 2 - 0.035, h / 2, 0], a));
+  parts.push(box('hd', [frameW, 0.07, t], [0, h - 0.035, 0], a));
+
+  // Leaves.
+  const leaves = sp.leaves ?? 1;
+  const leafW = sp.slider ? frameW / leaves : (frameW - 0.1) / leaves;
+  const leafH = h - 0.09;
+  for (let i = 0; i < leaves; i++) {
+    // Sliding and folding leaves step back from the frame; hinged ones sit in it.
+    const off = sp.slider ? i * 0.03 : 0;
+    const cx =
+      leaves === 1
+        ? 0
+        : -frameW / 2 + 0.05 + leafW * (i + 0.5) + (sp.slider ? leafW * 0.5 * i : 0);
+    const lz = sp.fold ? -0.02 * i : -off * 0.5;
+    const ang = sp.fold ? (i % 2 === 0 ? 0.5 : -0.5) : 0;
+
+    if (sp.industrial && !sp.glass) {
+      // Ribbed / louvred industrial leaf: a skin plus horizontal ribs.
+      parts.push(box(`lb${i}`, [leafW, leafH, t], [cx, leafH / 2, lz], c, [0, ang, 0]));
+      const ribs = sp.ribs ?? 4;
+      for (let k = 1; k < ribs; k++) {
+        parts.push(
+          <mesh key={`rb${i}${k}`} position={[cx, (leafH / ribs) * k, lz]} rotation={[0, ang, 0]}>
+            <boxGeometry args={[leafW - 0.04, 0.012, t + 0.008]} />
+            <Mat color={a} rough={0.5} metal={0.5} />
+          </mesh>,
+        );
+      }
+    } else {
+      parts.push(box(`lb${i}`, [leafW, leafH, t], [cx, leafH / 2, lz], c, [0, ang, 0]));
+    }
+
+    // Glazing, inset into the leaf.
+    if (sp.glazing) {
+      const gw = sp.pivot ? leafW * 0.92 : leafW * 0.66;
+      const gh = sp.pivot ? leafH * 0.86 : leafH * 0.72;
+      parts.push(
+        <mesh key={`gl${i}`} position={[cx, leafH / 2, lz + t / 2 + 0.006]}>
+          <boxGeometry args={[gw, gh, 0.008]} />
+          <Mat color="#bcd7e4" rough={0.12} />
+        </mesh>,
+      );
+      parts.push(
+        <mesh key={`gm${i}`} position={[cx, leafH / 2, lz + t / 2 + 0.014]}>
+          <boxGeometry args={[0.008, gh, 0.004]} />
+          <Mat color={a} rough={0.4} />
+        </mesh>,
+      );
+    }
+
+    // A Dutch door's lower half is a separate panel.
+    if (sp.split) {
+      parts.push(box(`sp${i}`, [leafW - 0.02, leafH * 0.46, t + 0.006], [cx, leafH * 0.27, lz], a));
+    }
+
+    // Panels: raised or flat rectangles, the difference being whether the door
+    // is flush and modern or panelled and traditional.
+    if (sp.panel && !sp.flush) {
+      const n = sp.panel;
+      const ph = (leafH - 0.12) / n;
+      for (let k = 0; k < n; k++) {
+        parts.push(
+          <mesh key={`pn${i}${k}`} position={[cx, 0.06 + ph * (k + 0.5), lz]} rotation={[0, ang, 0]}>
+            <boxGeometry args={[leafW - 0.16, ph - 0.08, t + 0.01]} />
+            <Mat color={a} rough={0.6} />
+          </mesh>,
+        );
+      }
+    }
+
+    // Hardware. A pivot door pulls on its own edge; a sliding or folding leaf
+    // has a handle and nothing else.
+    if (sp.reveal) {
+      parts.push(box(`rv${i}`, [0.03, leafH, 0.02], [cx + leafW / 2 - 0.02, leafH / 2, lz + t / 2 + 0.01], a));
+    } else if (sp.pushbar) {
+      parts.push(box(`pb${i}`, [leafW * 0.7, 0.05, 0.05], [cx, 1.05, lz + t / 2 + 0.04], '#8a8f99', undefined, 0.35));
+      parts.push(box(`pbs${i}`, [0.05, 0.18, 0.05], [cx - leafW * 0.35, 1.14, lz + t / 2 + 0.02], '#8a8f99'));
+      parts.push(box(`pbs2${i}`, [0.05, 0.18, 0.05], [cx + leafW * 0.35, 1.14, lz + t / 2 + 0.02], '#8a8f99'));
+    } else {
+      const hingeSide = sp.swing === 'right' ? 1 : -1;
+      const hx = sp.slider || sp.fold ? cx + leafW / 2 - 0.09 : cx + hingeSide * (leafW / 2 - 0.09);
+      parts.push(cyl(`hd${i}`, [0.018, 0.018, 0.09, 10], [hx, 1.02, lz + t / 2 + 0.055], '#c9a227', [Math.PI / 2, 0, 0]));
+      if (leaves > 1 && !sp.fold) {
+        parts.push(cyl(`hd2${i}`, [0.018, 0.018, 0.09, 10], [cx - hingeSide * (leafW / 2 - 0.09), 1.02, lz + t / 2 + 0.055], '#c9a227', [Math.PI / 2, 0, 0]));
+      }
+    }
+  }
+
+  // Sliding and barn doors run on a track above the opening.
+  if (sp.track) {
+    parts.push(box('rail', [frameW + 0.3, 0.05, 0.05], [0, h + 0.06, -zf + 0.04], '#4a4f57'));
+    for (const sx of [-1, 1]) {
+      parts.push(box(`hang${sx}`, [0.03, 0.12, 0.02], [sx * (leafW / 2 - 0.06), h + 0.02, -zf + 0.04], '#8a8f99'));
+    }
+  } else if (sp.slider) {
+    parts.push(box('rail', [frameW, 0.04, 0.05], [0, h - 0.02, zf - 0.03], '#8a8f99'));
+  }
+
+  return <group>{parts}</group>;
+}
+
 export function FurnitureBody({ item }: { item: FurnItem }) {
   switch (item.type) {
     case 'seating':
@@ -3607,6 +3732,8 @@ export function FurnitureBody({ item }: { item: FurnItem }) {
     case 'outdoor':
     case 'closet':
       return <Accessory f={item} />;
+    case 'doors':
+      return <Door f={item} />;
     default:
       return null;
   }

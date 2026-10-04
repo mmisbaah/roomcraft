@@ -47,7 +47,11 @@ export type FurnType =
   | 'office'
   | 'pantry'
   | 'outdoor'
-  | 'closet';
+  | 'closet'
+  // Doors were only ever an edge *kind* before this: every door in a plan was
+  // the same gap with the same jambs. These are real objects you can choose
+  // between and place.
+  | 'doors';
 
 export type EdgeKind = 'wall' | 'window' | 'door';
 
@@ -194,6 +198,7 @@ export const TYPE_LABEL: Record<FurnType, string> = {
   pantry: 'Pantry & Kitchen',
   outdoor: 'Outdoor & Sunroom',
   closet: 'Closet & Dressing',
+  doors: 'Doors',
 };
 
 export const TYPE_ICON: Record<FurnType, string> = {
@@ -229,6 +234,7 @@ export const TYPE_ICON: Record<FurnType, string> = {
   pantry: '\u{1F96D}',
   outdoor: '\u{1F332}',
   closet: '\u{1F455}',
+  doors: '\u{1F6AA}',
 };
 
 export const TYPE_ORDER: FurnType[] = [
@@ -264,6 +270,7 @@ export const TYPE_ORDER: FurnType[] = [
   'pantry',
   'outdoor',
   'closet',
+  'doors',
 ];
 
 export const MOUNT_LABEL: Record<Mount, string> = {

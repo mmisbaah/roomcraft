@@ -28,6 +28,8 @@ export default function TopBar() {
   const edgeEdit = useStore((s) => s.edgeEdit);
   const setEdgeEdit = useStore((s) => s.setEdgeEdit);
   const wallBuild = useStore((s) => s.wallBuild);
+  const roomCreate = useStore((s) => s.roomCreate);
+  const setRoomCreate = useStore((s) => s.setRoomCreate);
   const setWallBuild = useStore((s) => s.setWallBuild);
   const wallSnap = useStore((s) => s.wallSnap);
   const setWallSnap = useStore((s) => s.setWallSnap);
@@ -184,6 +186,15 @@ export default function TopBar() {
           </>
         )}
 
+        {mode === 'draw' && (
+          <button
+            className={`btn ${roomCreate ? 'primary' : 'ghost'}`}
+            onClick={() => setRoomCreate(!roomCreate)}
+            title="Drag out a rectangle on the ground to make a room — no walls needed"
+          >
+            {roomCreate ? '✕ Cancel' : '＋ Create room'}
+          </button>
+        )}
         {mode === 'draw' && room && (
           <button className="btn ghost" onClick={clearRoom}>
             ↺ New room

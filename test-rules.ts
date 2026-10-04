@@ -491,5 +491,50 @@ console.log('\nAccessory groups come in odd numbers:');
   ok('the preset marks accessory groups as groups', flagged.length >= 5, `${flagged.length} steps`);
 }
 
+console.log('\nA floor alone is a room:');
+{
+  // addRoom is what both the corner-tracing flow and the Create room drag go
+  // through, so this is the guarantee that walls are optional.
+  S().clearRoom();
+  ok('a room can be made from four corners with no walls at all',
+    S().addRoom([
+      { x: 0, y: 0 },
+      { x: 5, y: 0 },
+      { x: 5, y: 4 },
+      { x: 0, y: 4 },
+    ]),
+    `${S().rooms.length} rooms`);
+  ok('and no walls were created', S().walls.length === 0, `${S().walls.length}`);
+  ok('it gets suggested openings', S().rooms[0]?.openings.length === 4);
+  ok('and asks what it is for', S().pendingRoomId === S().rooms[0]?.id);
+
+  S().clearRoom();
+  ok('the Create room tool arms and disarms',
+    (S().setRoomCreate(true), S().roomCreate === true) &&
+      (S().setRoomCreate(false), S().roomCreate === false));
+
+  S().clearRoom();
+  ok('arming it turns the wall tool off, so they cannot fight',
+    (S().setWallBuild(true), S().setRoomCreate(true), S().wallBuild === false));
+  S().setWallBuild(false);
+  S().setRoomCreate(false);
+}
+
+console.log('\nDoors come in real types:');
+{
+  const doors = LIBRARY.filter((f) => f.type === 'doors');
+  ok('the library holds a set of doors', doors.length === 20, `${doors.length}`);
+  ok('every door is wall-mounted', doors.every((d) => d.mount === 'wall'));
+  ok('every door has artwork', doors.every((d) => resolveShape(d)));
+  const kinds = new Set(doors.map((d) => d.kind));
+  ok('and they are not all the same thing', kinds.size >= 16, `${kinds.size} distinct kinds`);
+  // The differences that matter are in the spec, not just the names.
+  ok('some are glazed', doors.some((d) => d.spec.glazing));
+  ok('some slide', doors.some((d) => d.spec.slider || d.spec.track));
+  ok('some fold', doors.some((d) => d.spec.fold));
+  ok('some pocket into the wall', doors.some((d) => d.spec.pocket));
+  ok('some have a push bar', doors.some((d) => d.spec.pushbar));
+}
+
 console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`} (${checks} total)`);
 process.exit(failures === 0 ? 0 : 1);
