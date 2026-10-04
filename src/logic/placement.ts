@@ -152,6 +152,45 @@ export function gapAllowed(a: FurnItem, b: FurnItem): boolean {
   return false;
 }
 
+/**
+ * Categories of the storage-family: "Storage & Casegoods", "Kitchen",
+ * "Closet & Dressing". These buy you a piece of joinery — a cabinet, a
+ * worktop unit, a dressing shelf — and joinery that stands clear of the wall
+ * is unusable, so AI Fill parks such pieces against a wall whenever it can.
+ */
+export const WALL_FURNITURE_TYPES: ReadonlySet<FurnType> = new Set([
+  'storage',
+  'kitchen',
+  'closet',
+]);
+
+/**
+ * How far from the room's edge a storage/kitchen/closet piece may sit while
+ * still counting as "next to the wall".
+ *
+ * Deeper than this and it parks itself in the middle of the room; tighter
+ * than this and the half-metre placement grid occasionally refuses an
+ * otherwise flush piece (a 0.6 m run of cabinets snaps to a 0.2 m offset), so
+ * 0.2 m is the slack the fill negotiates through.
+ */
+export const WALL_FURNITURE_GAP = 0.2;
+
+/** A piece counts as hugging the wall when one edge lands within the slack. */
+export function hugsWall(
+  poly: Vec2[],
+  x: number,
+  y: number,
+  w: number,
+  d: number,
+): boolean {
+  return rectGapToPoly(poly, x, y, w, d) <= WALL_FURNITURE_GAP + 1e-9;
+}
+
+/** Floor-standing storage/kitchen/closet pieces belong to a wall. */
+function wantsWall(f: FurnItem): boolean {
+  return f.mount === 'floor' && !isFlat(f) && WALL_FURNITURE_TYPES.has(f.type);
+}
+
 const normDeg = (r: number) => ((r % 360) + 360) % 360;
 
 /** Cells blocked by placed furniture (excluding one uid, rugs, wall/ceiling/surface pieces). */
@@ -192,6 +231,14 @@ export function rotRectInsidePoly(poly: Vec2[], x: number, y: number, w: number,
   }
   return true;
 }
+
+/**
+ * The one "surface" item that may live on seating: cushions and throws are
+ * placed exactly on the chair/bed they puff up. Built separately from kinds
+ * because every seat — sofa, dining chair, armchair — takes the same kind.
+ */
+const sitsOnSeats = (f: FurnItem) =>
+  f.kind === 'pillow' || f.spec?.pillow === true;
 
 /** Top surface height of a floor item, or null when it can't support anything. */
 export function supportTop(f: FurnItem): number | null {
@@ -708,6 +755,11 @@ function findSurfaceSpot(
     if (!f) continue;
     const top = supportTop(f);
     if (top == null) continue;
+    // Nothing stands on seating. A mug or a vase on a sofa is the fill's way
+    // of running out of table, and a sofa that can carry things is drawn as a
+    // sideboard. The exception buys two square of canvas softness: pillows and
+    // throws are the one thing a seat exists to hold.
+    if (f.type === 'seating' && !sitsOnSeats(item)) continue;
     const used = items.filter((o) => {
       if (o.uid === it.uid) return false;
       const of = byId.get(o.itemId);
@@ -719,6 +771,11 @@ function findSurfaceSpot(
       const ly = -dx * Math.sin(r) + dy * Math.cos(r);
       return Math.abs(lx) <= f.w / 2 + 0.03 && Math.abs(ly) <= f.d / 2 + 0.03;
     }).length;
+    // One item per furniture — a vase plus a bowl plus a candle is three small
+    // things demanding attention, while one is an accessory. More than one on
+    // the same piece stops it reading as sheltered placement and starts
+    // reading as stacking.
+    if (used >= 1) continue;
     const maxX = Math.max(0, f.w / 2 - item.w / 2 - 0.03);
     const maxY = Math.max(0, f.d / 2 - item.d / 2 - 0.03);
     for (let k = used; k < used + SPREAD.length; k++) {
@@ -828,6 +885,10 @@ function findFloorSpot(
           }
           if (!ok) continue;
         }
+        // Rule 2 — casegoods (Storage & Casegoods, Kitchen, Closet &
+        // Dressing) belong against a wall, not parked free in the room. Done
+        // pre-score so no candidate that fails this can still win.
+        if (wantsWall(item) && !hugsWall(poly, x, y, w, d)) continue;
         // Rule 1 — a floor or table lamp takes a position that keeps the
         // spacing from every other light. Excluding positions here rather than
         // rejecting the winner afterwards is what lets a lamp take the far
@@ -938,7 +999,9 @@ function findBestSpotInner(
     case 'ceiling':
       return findCeilingSpot(grid, poly, items, byId, item);
     case 'surface':
-      return findSurfaceSpot(poly, items, byId, item) ?? findFloorSpot(grid, poly, items, byId, item, edges, opts);
+      // Never falls back to standing on the floor: when no furniture piece can
+      // carry it, the accent is left out rather than parked on the rug.
+      return findSurfaceSpot(poly, items, byId, item);
     default:
       return findFloorSpot(grid, poly, items, byId, item, edges, opts);
   }
@@ -1081,6 +1144,10 @@ export function strictFit(
   if (isLight(item) && !lightSpacingClear(items, byId, x, y, item, excludeUid)) return false;
   if (opts?.skipOverlap) return true;
   const { w, d } = rotatedSize(item.w, item.d, rot);
+  // Casegoods only work where they are — a drawer cannot be pulled when its
+  // front faces the middle of the room — so the placement rule for them is
+  // "against the wall", and corrective slides may not move one off it.
+  if (wantsWall(item) && !hugsWall(poly, x, y, w, d)) return false;
   for (const o of items) {
     if (o.uid === excludeUid) continue;
     const f = byId.get(o.itemId);
