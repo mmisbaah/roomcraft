@@ -11,10 +11,22 @@
  * Each entry below is one line of a room's specification, mapped to the library
  * pair that satisfies it. This suite checks both halves.
  */
-import { PRESETS, ROOM_KIND_ORDER, withCeilingLight } from './src/logic/placement';
+import './test-dom-stub';
+import {
+  PRESETS,
+  ROOM_KIND_ORDER,
+  coverageBudget,
+  floorPieceLimit,
+  isFlat,
+  oddCount,
+  withCeilingLight,
+} from './src/logic/placement';
 import { LIBRARY } from './src/data/items';
 import { resolveShape } from './src/components/ItemThumb';
+import { useStore } from './src/store';
 import type { FurnType, RoomKind } from './src/types';
+
+const S = () => useStore.getState();
 
 let failures = 0;
 let checks = 0;
@@ -414,6 +426,69 @@ console.log('\nEvery new item has artwork of its own, not a borrowed silhouette:
   const NEW = ['nursery', 'gym', 'laundry', 'office', 'pantry', 'outdoor', 'closet'];
   const unmapped = LIBRARY.filter((f) => NEW.includes(f.type) && !resolveShape(f)).map((f) => `${f.type}:${f.kind}`);
   ok('every new item resolves to artwork', unmapped.length === 0, unmapped.join(', '));
+}
+
+console.log('\nThe quantity guidelines hold:');
+{
+  // 4-8 pieces of floor furniture, and no more than 30% of the floor covered
+  // (40% in a small room). Measured by actually filling a room, because the
+  // preset list on its own says nothing about what ends up standing on it.
+  ok('a moderate room budgets 30%', coverageBudget(22.5) === 0.3, `${coverageBudget(22.5)}`);
+  ok('a small room budgets 40%', coverageBudget(9.6) === 0.4, `${coverageBudget(9.6)}`);
+  ok('the boundary is 16 m²', coverageBudget(15.9) === 0.4 && coverageBudget(16.1) === 0.3);
+
+  const poly = [
+    { x: 0, y: 0 },
+    { x: 5, y: 0 },
+    { x: 5, y: 4.5 },
+    { x: 0, y: 4.5 },
+  ];
+  const area = 22.5;
+  const over: string[] = [];
+  const tooMany: string[] = [];
+  for (const kind of ROOM_KIND_ORDER) {
+    S().clearRoom();
+    S().askRoom(null);
+    S().setMode('draw');
+    S().setTier('max');
+    S().addRoom(poly.map((q) => ({ ...q })));
+    const room = S().rooms[0];
+    S().describeRoom(room.id, { name: '', kind, note: '' });
+    S().clearItems();
+    S().aiFill();
+    const mine = S().items.filter((i) => i.roomId === room.id);
+    let floorArea = 0;
+    let pieces = 0;
+    for (const it of mine) {
+      const f = LIBRARY.find((x) => x.id === it.itemId);
+      if (!f || f.mount !== 'floor' || isFlat(f)) continue;
+      floorArea += f.w * f.d;
+      pieces++;
+    }
+    const pct = (floorArea / area) * 100;
+    if (pct > 30.5) over.push(`${kind} ${pct.toFixed(1)}%`);
+    if (pieces > floorPieceLimit(kind)) tooMany.push(`${kind} ${pieces}`);
+  }
+  ok('no room exceeds the 30% floor budget', over.length === 0, over.join(', '));
+  ok('no room exceeds its piece allowance', tooMany.length === 0, tooMany.join(', '));
+  S().setWallBuild(false);
+  S().clearRoom();
+}
+
+console.log('\nAccessory groups come in odd numbers:');
+{
+  ok('two becomes three', oddCount(2) === 3);
+  ok('four becomes five', oddCount(4) === 5);
+  ok('three is left alone', oddCount(3) === 3);
+  ok('one is left alone', oddCount(1) === 1);
+  ok('zero is left alone', oddCount(0) === 0);
+  // Every step flagged as a group must actually be a group of something.
+  const flagged = ROOM_KIND_ORDER.flatMap((k) =>
+    (PRESETS[k] ?? [])
+      .filter((s) => s.group)
+      .map((s) => `${k}:${s.type}:${s.kind}`),
+  );
+  ok('the preset marks accessory groups as groups', flagged.length >= 5, `${flagged.length} steps`);
 }
 
 console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`} (${checks} total)`);

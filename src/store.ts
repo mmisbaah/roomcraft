@@ -34,6 +34,10 @@ import {
   ROOM_LABEL,
   stepsFromNote,
   withCeilingLight,
+  coverageBudget,
+  floorPieceLimit,
+  isFlat,
+  oddCount,
   type EdgeInfo,
 } from './logic/placement';
 import { activateLicense, getLicense, startCheckout } from './lib/checkout';
@@ -1049,6 +1053,7 @@ export const useStore = create<AppState>((set, get) => ({
     // the same layout twice. The grid spans all rooms, so rooms can't collide.
     let placed = 0;
     let skipped = 0;
+    let overBudget = 0;
     const items: PlacedItem[] = [];
 
     for (const room of st.rooms) {
@@ -1062,8 +1067,21 @@ export const useStore = create<AppState>((set, get) => ({
       const edges = edgesOf(room.poly, room.openings, st.walls);
       const inRoom: PlacedItem[] = [];
 
+      // Quantity budget for this room. Floor furniture is what a room can feel
+      // crowded by, so the two limits are counted against it only: wall, ceiling
+      // and tabletop pieces add to the sense of a finished room without taking
+      // any floor away, and stopping those short would just look unfinished.
+      const roomArea = Math.abs(polyArea(room.poly));
+      const budget = coverageBudget(roomArea) * roomArea;
+      const pieceCap = floorPieceLimit(room.kind);
+      let floorArea = 0;
+      let floorPieces = 0;
+
       for (const step of steps) {
-        const count = step.count ?? 1;
+        // Accessory groups are rounded to an odd number; everything else takes
+        // the step's count as written.
+        const want = step.count ?? 1;
+        const count = step.group ? oddCount(want) : want;
         for (let c = 0; c < count; c++) {
           // Unlocked candidates, preferring the requested kind.
           let pool = LIBRARY.filter(
@@ -1100,6 +1118,15 @@ export const useStore = create<AppState>((set, get) => ({
           });
           if (!eligible.length) continue;
           const pick = eligible[Math.floor(Math.random() * eligible.length)];
+
+          // Respect the room's quantity budget before trying to place. A rug or
+          // a flat runner is walkable and never makes a room feel tight, so it
+          // is exempt — the guideline is about furniture standing on the floor.
+          const onFloor = pick.mount === 'floor' && !isFlat(pick);
+          if (onFloor && (floorPieces >= pieceCap || floorArea + pick.w * pick.d > budget)) {
+            overBudget++;
+            continue;
+          }
         // Place against everything already in the room *and* other rooms.
         const spot = findBestSpot(st.grid, room.poly, items, ITEM_INDEX, pick, edges);
         if (!spot) {
@@ -1118,6 +1145,10 @@ export const useStore = create<AppState>((set, get) => ({
         inRoom.push(it);
         items.push(it);
         placed++;
+        if (onFloor) {
+          floorPieces++;
+          floorArea += pick.w * pick.d;
+        }
         }
       }
       // Post-pass: apply the relational design rules (conversation circle,
@@ -1132,11 +1163,14 @@ export const useStore = create<AppState>((set, get) => ({
     }
     set({ items, selected: null });
     const rooms = st.rooms.length;
+    const notes: string[] = [];
+    if (skipped) notes.push(`${skipped} didn't fit — try a bigger room`);
+    if (overBudget) notes.push(`${overBudget} left out to keep the floor clear`);
     toast(
       get,
       set,
-      skipped
-        ? `AI placed ${placed} items across ${rooms} room${rooms > 1 ? 's' : ''} (${skipped} didn't fit — try a bigger room).`
+      notes.length
+        ? `AI placed ${placed} items across ${rooms} room${rooms > 1 ? 's' : ''} (${notes.join('; ')}).`
         : `AI placed ${placed} items across ${rooms} room${rooms > 1 ? 's' : ''} using the ${RULES.length}-rule design guide.`,
     );
   },

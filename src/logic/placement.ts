@@ -1609,6 +1609,69 @@ function anchorRug(
 }
 
 // ---------------------------------------------------------------------------
+// Quantity guidelines
+// ---------------------------------------------------------------------------
+
+/**
+ * How much floor a room's furniture may take, as a fraction of the floor area.
+ *
+ * The guideline is blunt about this: past roughly 30% coverage a room stops
+ * reading as furnished and starts reading as blocked, and a small room gets a
+ * little more tolerance because there is no room to be cramped in. Enforcing it
+ * while filling is what makes a plan come out complete yet uncluttered — without
+ * it the fill packs every square metre it can reach, which measured 43% of the
+ * floor in a home gym and 33% in a living room.
+ */
+export const COVERAGE_BUDGET = 0.3;
+export const COVERAGE_BUDGET_SMALL = 0.4;
+/** Below this floor area (m²) a room counts as small. */
+export const SMALL_ROOM_AREA = 16;
+
+/**
+ * How many pieces of floor furniture one room may hold.
+ *
+ * The guideline is 4-8 for a typical room, so 8 is the ceiling. Rooms whose own
+ * guidance says otherwise get their own number rather than being forced into a
+ * limit that would strip them of the reason they exist — a gym is told to want
+ * 4-10 pieces of equipment, and a squat rack, treadmill and rower already eat
+ * the floor.
+ */
+export const FLOOR_PIECE_LIMIT = 8;
+const FLOOR_PIECE_LIMIT_BY_KIND: Partial<Record<RoomKind, number>> = {
+  gym: 10,
+  kitchen: 10,
+  laundry: 10,
+  library: 10,
+  sunroom: 10,
+  pantry: 9,
+  kids: 9,
+  entryway: 9,
+};
+
+/** Floor-coverage allowance for a room of this size. */
+export function coverageBudget(roomArea: number): number {
+  return roomArea < SMALL_ROOM_AREA ? COVERAGE_BUDGET_SMALL : COVERAGE_BUDGET;
+}
+
+/** Floor-piece allowance for a room of this kind. */
+export function floorPieceLimit(kind: RoomKind): number {
+  return FLOOR_PIECE_LIMIT_BY_KIND[kind] ?? FLOOR_PIECE_LIMIT;
+}
+
+/**
+ * Round an accessory count to something that looks deliberate.
+ *
+ * The guideline is odd numbers — three, five, seven — because a perfectly
+ * symmetrical pair pulls the eye to the gap in the middle. A step asking for two
+ * vases therefore buys three and one asking for four cushions buys five. One is
+ * left alone: a single object is already as unbalanced as it gets.
+ */
+export function oddCount(n: number): number {
+  if (n <= 1) return n;
+  return n % 2 === 0 ? n + 1 : n;
+}
+
+// ---------------------------------------------------------------------------
 // AI fill presets
 // ---------------------------------------------------------------------------
 
@@ -1616,6 +1679,13 @@ export interface PresetStep {
   type: FurnType;
   kind?: string;
   count?: number;
+  /**
+   * This step is a group of accessories rather than furniture — cushions,
+   * vases, a set of candles — so its count is rounded to an odd number. A
+   * symmetrical pair pulls the eye to the gap in the middle; three, five or
+   * seven read as deliberate.
+   */
+  group?: boolean;
 }
 
 /**
@@ -1663,7 +1733,7 @@ export const PRESETS: Record<RoomKind, PresetStep[]> = {
     { type: 'floorlamp', kind: 'table' },
     { type: 'walldecor', kind: 'artwork' },
     { type: 'walldecor', kind: 'mirror' },
-    { type: 'textiles', kind: 'pillow', count: 2 },
+    { type: 'textiles', kind: 'pillow', count: 2, group: true },
     { type: 'textiles', kind: 'throw' },
     { type: 'textiles', kind: 'curtain' },
     { type: 'floorplants', kind: 'monstera' },
@@ -1727,7 +1797,7 @@ export const PRESETS: Record<RoomKind, PresetStep[]> = {
     { type: 'walllight', kind: 'sconce', count: 2 },
     { type: 'walldecor', kind: 'artwork' }, // above the headboard
     { type: 'walldecor', kind: 'mirror' },
-    { type: 'textiles', kind: 'pillow', count: 2 }, // duvet and pillows
+    { type: 'textiles', kind: 'pillow', count: 2, group: true }, // duvet and pillows
     { type: 'textiles', kind: 'throw' },
     { type: 'textiles', kind: 'curtain' }, // blackout curtains
     { type: 'tabletop', kind: 'box' }, // jewellery box
@@ -1753,7 +1823,7 @@ export const PRESETS: Record<RoomKind, PresetStep[]> = {
     { type: 'walldecor', kind: 'artwork', count: 2 }, // colourful wall art
     { type: 'walldecor', kind: 'canvas' }, // posters
     { type: 'nursery', kind: 'canopy' }, // hanging canopy
-    { type: 'textiles', kind: 'pillow', count: 2 }, // playful bedding
+    { type: 'textiles', kind: 'pillow', count: 2, group: true }, // playful bedding
     { type: 'textiles', kind: 'throw' },
     { type: 'functional', kind: 'basket', count: 2 }, // toy organisers
     { type: 'nursery', kind: 'toybin' },
@@ -1856,7 +1926,7 @@ export const PRESETS: Record<RoomKind, PresetStep[]> = {
     // Design objects.
     { type: 'floorlamp', kind: 'table' }, // bedside lamp
     { type: 'walldecor', kind: 'mirror' },
-    { type: 'textiles', kind: 'pillow', count: 2 }, // neutral bedding
+    { type: 'textiles', kind: 'pillow', count: 2, group: true }, // neutral bedding
     { type: 'towelrack' }, // fresh towels
     { type: 'tabletop', kind: 'tray' }, // welcome tray
     { type: 'tabletop', kind: 'bowl' }, // water and snacks
@@ -1985,7 +2055,7 @@ export const PRESETS: Record<RoomKind, PresetStep[]> = {
     { type: 'outdoor', kind: 'planter' },
     { type: 'ceilight', kind: 'fan' }, // ceiling fan
     { type: 'textiles', kind: 'curtain' }, // sheer curtains
-    { type: 'textiles', kind: 'pillow', count: 2 }, // weather-resistant pillows
+    { type: 'textiles', kind: 'pillow', count: 2, group: true }, // weather-resistant pillows
     { type: 'outdoor', kind: 'chimes' }, // wind chimes
     { type: 'outdoor', kind: 'lantern', count: 2 },
     { type: 'outdoor', kind: 'feeder' }, // bird feeder
