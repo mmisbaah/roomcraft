@@ -1249,15 +1249,14 @@ export const useStore = create<AppState>((set, get) => ({
         ...(PRESETS[room.kind] ?? PRESETS.living),
         ...stepsFromNote(room.note, room.kind),
       ]);
-      // Rule 7 — one ceiling light per 14 square feet. The ceiling-light steps
-      // the presets already carry are replaced by the computed count, and they
-      // are deliberately allowed to repeat: a room lit by rule 7 cannot also
-      // obey a rule against duplicates.
+      // Rule 7 — one ceiling light per 9 square metres. These are the extra
+      // downlights; the feature fitting over the table or centre of the room is
+      // the one the presets already carry.
       const lights = ceilingLightsFor(roomArea);
-      // Recessed, because at this density they are downlights in a grid, not
-      // eighteen chandeliers. Repeats are allowed for ceiling lights (see the
-      // duplicate rule below): the library holds two recessed fittings and rule
-      // 7 can ask for eighteen.
+      // Recessed, so they read as a grid of downlights rather than competing
+      // with the pendant the preset puts in. Repeats are allowed for ceiling
+      // lights (see the duplicate rule below): the library holds two recessed
+      // fittings and rule 7 asks for up to fourteen.
       for (let i = 0; i < lights; i++) steps.push({ type: 'ceilight', kind: 'recessed' });
       const dupFree = roomArea <= DUPLICATE_FREE_AREA_MAX;
       const edges = edgesOf(room.poly, room.openings, st.walls);
@@ -1319,10 +1318,10 @@ export const useStore = create<AppState>((set, get) => ({
           // a 22 m² living room and wrong for 120 m², where a second seating
           // group is the difference between furnished and empty — and it is the
           // per-kind cap, not the piece budget, that binds first there.
-          // The ceiling-light count is fixed by rule 7, not by taste: one per 14 square
-          // feet. The per-kind cap exists to stop a room collecting nine of the
-          // same chair, and applying it to downlights meant a 48 m² room asked
-          // for 38 lights and got 3.
+          // The ceiling-light count is fixed by rule 7, not by taste: one per 9 m².
+          // The per-kind cap exists to stop a room collecting nine of the same
+          // chair, and applying it to downlights capped a large room well below
+          // the number rule 7 asks for.
           if (step.type !== 'ceilight') {
             const cap = Math.max(1, Math.round(roomCap(p.type, p.kind) * capScale));
             if (heldOf(p.kind) >= cap) return false;
@@ -1337,10 +1336,10 @@ export const useStore = create<AppState>((set, get) => ({
           // second nightstand is correct, and refusing repeats there is what
           // left a large room unable to fill up at all.
           if (allowRepeat) return true;
-          // Rule 7 needs ceiling lights to repeat — a room lit to that density
-          // cannot also obey a rule against duplicates. This applies in every
-          // room, not just the duplicate-free ones: the library holds two
-          // recessed fittings and rule 7 asks for ninety-three of them.
+          // Rule 7's downlights are the one thing a room is meant to repeat, so they are
+          // exempt from the no-duplicates rule in every room, not just the
+          // duplicate-free ones. The library holds two recessed fittings and
+          // rule 7 can ask for fourteen.
           if (step.type === 'ceilight') return true;
           if (dupFreeRoom) {
             // Rule 5 is about furniture. Two cushions on a sofa or a pair of

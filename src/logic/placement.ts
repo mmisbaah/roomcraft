@@ -1713,13 +1713,15 @@ const TYPICAL_ROOM_AREA = 22.5;
 export const CHAIR_WALK_SPACE = 0.6;
 
 /**
- * One ceiling light per 14 square feet — 1.30 m².
+ * One ceiling light per 9 square metres.
  *
- * Taken literally, as written: that is a lot of fittings, and a 22.5 m² room
- * gets seventeen of them. It reads like a specification for downlights rather
- * than a mistake, so it is implemented as given rather than quietly rescaled.
+ * This was first written as 14 square *feet* and implemented literally, which
+ * is 1.30 m² per fitting — eighteen downlights in a 22.5 m² room, and
+ * ninety-three in a 120 m² one. Nine square metres is the sane reading of the
+ * same rule and is what is used now: three fittings in a 22.5 m² room, which is
+ * how a room is actually lit.
  */
-export const CEILING_LIGHT_AREA = 14 * 0.092903;
+export const CEILING_LIGHT_AREA = 9;
 
 /** How many ceiling lights a room of this floor area gets. */
 export function ceilingLightsFor(area: number): number {

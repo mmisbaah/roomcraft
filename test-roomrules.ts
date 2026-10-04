@@ -73,13 +73,15 @@ const front = (rot: number) => {
   return { x: Math.sin(r), y: -Math.cos(r) };
 };
 
-console.log('Rule 7 — one ceiling light per 14 square feet:');
+console.log('Rule 7 — one ceiling light per 9 square metres:');
 {
-  ok('the area per light is 14 sq ft', Math.abs(CEILING_LIGHT_AREA - 14 * 0.092903) < 1e-6,
-    `${CEILING_LIGHT_AREA.toFixed(3)} m2`);
-  ok('a 22.5 m2 room gets 18 fittings', ceilingLightsFor(22.5) === 18,
+  ok('the area per light is 9 m2', CEILING_LIGHT_AREA === 9,
+    `${CEILING_LIGHT_AREA} m2`);
+  ok('a 22.5 m2 room gets 3 fittings', ceilingLightsFor(22.5) === 3,
     `${ceilingLightsFor(22.5)}`);
-  ok('a small room still gets at least one', ceilingLightsFor(4) === 4, `${ceilingLightsFor(4)}`);
+  ok('a 120 m2 room gets 14 fittings', ceilingLightsFor(120) === 14,
+    `${ceilingLightsFor(120)}`);
+  ok('a small room still gets at least one', ceilingLightsFor(4) === 1, `${ceilingLightsFor(4)}`);
 
   for (const [label, w, h] of [
     ['small', 3.2, 3.0],
