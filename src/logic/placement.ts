@@ -729,10 +729,12 @@ export function findBestSpot(
 ): Spot | null {
   switch (item.mount) {
     case 'wall':
-    // A door snaps to a wall like anything else hung on one, but it stands on
-    // the floor once it is there.
-    case 'opening':
       return findWallSpot(poly, items, byId, item, edges);
+    // A door moves freely — anywhere in the room, at any rotation. It is only
+    // *an opening* once it happens to be standing in a wall, which is a
+    // consequence of where you put it rather than a rule about where it may go.
+    case 'opening':
+      return findFloorSpot(grid, poly, items, byId, item, edges, opts);
     case 'ceiling':
       return findCeilingSpot(grid, poly, items, byId, item);
     case 'surface':
@@ -1635,6 +1637,16 @@ export const COVERAGE_BUDGET_SMALL = 0.4;
 export const SMALL_ROOM_AREA = 16;
 
 /**
+ * The share of the floor a room's furniture should reach before the fill stops.
+ *
+ * The ceiling alone is not enough: the preset lists are a fixed *count*, so a
+ * large room was left nearly bare — 21 items across 5% of a 120 m² living room
+ * reads as empty, not as spacious. This is the other half of the same rule, and
+ * it sits far enough below the ceiling that the two never come into conflict.
+ */
+export const COVERAGE_FLOOR = 0.1;
+
+/**
  * How many pieces of floor furniture one room may hold.
  *
  * The guideline is 4-8 for a typical room, so 8 is the ceiling. Rooms whose own
@@ -1660,9 +1672,22 @@ export function coverageBudget(roomArea: number): number {
   return roomArea < SMALL_ROOM_AREA ? COVERAGE_BUDGET_SMALL : COVERAGE_BUDGET;
 }
 
-/** Floor-piece allowance for a room of this kind. */
-export function floorPieceLimit(kind: RoomKind): number {
-  return FLOOR_PIECE_LIMIT_BY_KIND[kind] ?? FLOOR_PIECE_LIMIT;
+/** The floor area the 4-8 piece guideline is written about. */
+const TYPICAL_ROOM_AREA = 22.5;
+
+/**
+ * Floor-piece allowance for a room of this kind and size.
+ *
+ * The guideline's 4-8 is about a *typical* room, so it is the baseline rather
+ * than a hard ceiling: eight pieces is generous in 22 m² and nowhere near
+ * enough in 120 m², where the same eight left 95% of the floor bare. The
+ * allowance therefore grows with the floor, on a square-root curve so a large
+ * open-plan space gets more furniture without the count running away.
+ */
+export function floorPieceLimit(kind: RoomKind, area = TYPICAL_ROOM_AREA): number {
+  const base = FLOOR_PIECE_LIMIT_BY_KIND[kind] ?? FLOOR_PIECE_LIMIT;
+  if (area <= TYPICAL_ROOM_AREA) return base;
+  return Math.max(base, Math.round(base * Math.sqrt(area / TYPICAL_ROOM_AREA)));
 }
 
 /**

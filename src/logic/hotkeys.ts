@@ -92,15 +92,13 @@ export function objectHotkey(e: KeyboardEvent, dirMap?: Record<string, DirProvid
   // along the wall. This makes arrow keys useful on all walls.
   const itemDef = ITEM_INDEX.get(it.itemId);
   const room = st.rooms.find((r) => r.id === it.roomId) ?? selectActiveRoom(st);
-  if (itemDef && (itemDef.mount === 'wall' || itemDef.mount === 'opening') && room) {
+  if (itemDef && itemDef.mount === 'wall' && room) {
     const edges = edgesOf(room.poly, room.openings, st.walls);
-    // Find the wall this item is attached to (nearest non-door edge). A door
-    // skips that rule: the wall it stands in *is* a door edge now, and sliding
-    // it along its own opening is exactly what the arrow keys should do.
+    // Find the wall this item is attached to (nearest non-door edge)
     let bestEdge: { a: { x: number; y: number }; b: { x: number; y: number }; kind: string } | null = null;
     let bestD = Infinity;
     for (const edge of edges) {
-      if (edge.kind === 'door' && itemDef.mount !== 'opening') continue;
+      if (edge.kind === 'door') continue;
       const d = distPointSeg({ x: it.x, y: it.y }, edge.a, edge.b);
       if (d < bestD) {
         bestD = d;

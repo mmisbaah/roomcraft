@@ -543,7 +543,7 @@ export default function Canvas2D() {
         tb.style.top = `${sy(sel.y) - halfD - 14}px`;
         const rotBtn = tb.querySelector('[data-act="rotate"]') as HTMLElement | null;
         if (rotBtn && f) {
-          rotBtn.textContent = f.mount === 'wall' || f.mount === 'opening' ? 'Next wall' : 'Rotate 90°';
+          rotBtn.textContent = f.mount === 'wall' ? 'Next wall' : 'Rotate 90°';
         }
         void halfW;
       }

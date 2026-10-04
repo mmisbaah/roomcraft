@@ -182,7 +182,7 @@ export default function DetailPanel() {
 
           <div className="detail-actions">
             <button className="btn ghost" onClick={rotateSelected}>
-              ⟳ {item.mount === 'wall' || item.mount === 'opening' ? 'Next wall' : 'Rotate 90°'} <kbd>R</kbd>
+              ⟳ {item.mount === 'wall' ? 'Next wall' : 'Rotate 90°'} <kbd>R</kbd>
             </button>
             <button className="btn ghost" onClick={duplicateSelected}>
               ⧉ Duplicate

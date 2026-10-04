@@ -38,7 +38,9 @@ import {
   floorPieceLimit,
   isFlat,
   oddCount,
+  COVERAGE_FLOOR,
   type EdgeInfo,
+  type PresetStep,
 } from './logic/placement';
 import { activateLicense, getLicense, startCheckout } from './lib/checkout';
 import { CLEARANCE, RULES } from './logic/rules';
@@ -363,6 +365,43 @@ const ROOM_QUANTITY: Record<string, number> = {
   'seating:sofa': 1,
   'seating:dining': 8,
   'seating:accent': 4,
+  // Caps for the pieces a large room tops up with. Without these the coverage
+  // top-up could happily add a fifth coffee table, because an uncapped kind has
+  // no limit at all — the list of distinct items, not the count, was the only
+  // brake. Repeated pieces are normal in a real room: two nightstands, four
+  // dining chairs, a pair of side tables.
+  'seating:loveseat': 1,
+  'seating:bench': 2,
+  'seating:stool': 4,
+  'seating:ottoman': 2,
+  'seating:pouf': 3,
+  'tables:coffee': 2,
+  'tables:dining': 2,
+  'tables:round': 1,
+  'tables:side': 4,
+  'tables:console': 2,
+  'tables:desk': 1,
+  'tables:vanity': 1,
+  'tables:accent': 3,
+  'tables:nested': 1,
+  'storage:bookcase': 3,
+  'storage:nightstand': 4,
+  'storage:dresser': 2,
+  'storage:chest': 3,
+  'storage:shelving': 3,
+  'storage:cabinet': 3,
+  'storage:credenza': 2,
+  'storage:sideboard': 1,
+  'storage:buffet': 1,
+  'storage:armoire': 1,
+  'storage:wardrobe': 1,
+  'storage:media': 2,
+  'beds:platform': 1,
+  'beds:upholstered': 1,
+  'beds:panel': 1,
+  'beds:canopy': 1,
+  'beds:sleigh': 1,
+  'dining:bench': 2,
   // A nursery has one crib and one changing table; two of either is a mistake,
   // not a variety. Same reasoning for the single-occupancy kit in the other
   // rule-driven categories — a gym gets one treadmill, a laundry one washer.
@@ -417,6 +456,32 @@ const ROOM_QUANTITY: Record<string, number> = {
   'closet:closetshelf': 2,
   'closet:shoerack': 1,
 };
+
+/**
+ * Categories whose pieces stand on the floor and take up room. The coverage
+ * top-up only draws from these: a rug you can walk on and a jar the size of a
+ * fist do not make a large room look furnished, and adding them without limit
+ * fills a room with clutter while its floor stays bare.
+ */
+const FURNITURE_TYPES = new Set<string>([
+  'seating',
+  'tables',
+  'storage',
+  'beds',
+  'kitchen',
+  'dining',
+  'vanity',
+  'bathtub',
+  'shower',
+  'toilet',
+  'nursery',
+  'gym',
+  'laundry',
+  'office',
+  'pantry',
+  'outdoor',
+  'closet',
+]);
 
 /**
  * How many of one piece a single room may hold. Keyed by kind, falling back to
@@ -479,33 +544,18 @@ function moveItem(
 
   // Wall pieces stay anchored to the room they were placed in; free-standing
   // pieces adopt whichever room contains the drop point.
-  const dest = item.mount === 'wall' || item.mount === 'opening' ? own : roomsAt(st, { x, y })[0] ?? own;
+  const dest = item.mount === 'wall' ? own : roomsAt(st, { x, y })[0] ?? own;
   const edges = edgesOf(dest.poly, dest.openings, st.walls);
 
-  if (item.mount === 'wall' || item.mount === 'opening') {
+  if (item.mount === 'wall') {
     const spot = projectToWall(own.poly, edges, item, x, y);
     if (!spot) return false;
     if (!canPlace(st.grid, own.poly, st.items, ITEM_INDEX, item, spot.x, spot.y, spot.rot, uid))
       return false;
-    const items = st.items.map((i) =>
-      i.uid === uid ? { ...i, x: spot.x, y: spot.y, rot: spot.rot } : i,
-    );
-    // A dragged door opens the wall it lands on and closes the one it left.
-    const isDoor = item.type === 'doors';
-    // Opening the wall it moved to is not enough — the wall it moved off has to
-    // be closed again, or dragging a door across a room leaves a hole behind it.
-    const rooms = isDoor
-      ? releaseDoorEdge(
-          withDoorOpening(st.rooms, own.id, spot.x, spot.y),
-          own.id,
-          target.x,
-          target.y,
-          items,
-        )
-      : st.rooms;
     set({
-      items,
-      ...(isDoor && rooms !== st.rooms ? { rooms, grid: makeGrid(rooms, st.walls) } : {}),
+      items: st.items.map((i) =>
+        i.uid === uid ? { ...i, x: spot.x, y: spot.y, rot: spot.rot } : i,
+      ),
     });
     return true;
   }
@@ -536,8 +586,23 @@ function moveItem(
         : canPlace(st.grid, dest.poly, st.items, ITEM_INDEX, item, sx, sy, target.rot, uid);
   if (!ok) return false;
 
+  const moved = st.items.map((i) => (i.uid === uid ? { ...i, x: sx, y: sy, roomId: dest.id } : i));
+  // A door moves freely, so whether it is in an opening is decided by where it
+  // lands: near a wall it opens that wall, away from one it closes the wall it
+  // left. Dragging a door across a room must not leave a hole behind it.
+  const isDoor = item.type === 'doors';
+  const rooms = isDoor
+    ? releaseDoorEdge(
+        withDoorOpening(st.rooms, dest.id, sx, sy),
+        dest.id,
+        target.x,
+        target.y,
+        moved,
+      )
+    : st.rooms;
   set({
-    items: st.items.map((i) => (i.uid === uid ? { ...i, x: sx, y: sy, roomId: dest.id } : i)),
+    items: moved,
+    ...(isDoor && rooms !== st.rooms ? { rooms, grid: makeGrid(rooms, st.walls) } : {}),
   });
   return true;
 }
@@ -1038,30 +1103,17 @@ export const useStore = create<AppState>((set, get) => ({
     if (!item) return;
     const edges = edgesOf(room.poly, room.openings, st.walls);
 
-    if (item.mount === 'wall' || item.mount === 'opening') {
-      // Wall pieces hop to the next wall that fits. A door does the same, and
-      // takes its opening with it — the wall it leaves has to close again.
+    if (item.mount === 'wall') {
+      // Wall pieces hop to the next wall that fits.
       const spot = nextWallSpot(room.poly, st.items, ITEM_INDEX, item, edges, target.x, target.y);
       if (!spot) {
         toast(get, set, 'No other wall fits this piece.');
         return;
       }
-      const items = st.items.map((i) =>
-        i.uid === target.uid ? { ...i, x: spot.x, y: spot.y, rot: spot.rot } : i,
-      );
-      const rooms =
-        item.type === 'doors'
-          ? releaseDoorEdge(
-              withDoorOpening(st.rooms, room.id, spot.x, spot.y),
-              room.id,
-              target.x,
-              target.y,
-              items,
-            )
-          : st.rooms;
       set({
-        items,
-        ...(item.type === 'doors' ? { rooms, grid: makeGrid(rooms, st.walls) } : {}),
+        items: st.items.map((i) =>
+          i.uid === target.uid ? { ...i, x: spot.x, y: spot.y, rot: spot.rot } : i,
+        ),
       });
       toast(get, set, 'Moved to the next wall.');
       return;
@@ -1202,65 +1254,94 @@ export const useStore = create<AppState>((set, get) => ({
       // any floor away, and stopping those short would just look unfinished.
       const roomArea = Math.abs(polyArea(room.poly));
       const budget = coverageBudget(roomArea) * roomArea;
-      const pieceCap = floorPieceLimit(room.kind);
+      const pieceCap = floorPieceLimit(room.kind, roomArea);
       let floorArea = 0;
       let floorPieces = 0;
 
-      for (const step of steps) {
-        // Accessory groups are rounded to an odd number; everything else takes
-        // the step's count as written.
-        const want = step.count ?? 1;
-        const count = step.group ? oddCount(want) : want;
-        for (let c = 0; c < count; c++) {
-          // Unlocked candidates, preferring the requested kind.
-          let pool = LIBRARY.filter(
-            (i) => i.type === step.type && tierUnlocked(i.tier, st.tier),
-          );
-          if (!pool.length) continue;
-          if (step.kind) {
-            const exact = pool.filter((i) => i.kind === step.kind);
-            // Only narrow to the exact kind when it's actually available. On a
-            // lower tier it may be locked, and then the step falls back to the
-            // rest of the category — so the quota below has to be applied to
-            // whatever gets picked, not to the kind we asked for.
-            if (exact.length) pool = exact;
+      /**
+       * Pick one item for a step and put it down. Returns false when nothing
+       * could be placed, which is what both the main pass and the coverage
+       * top-up below use to know when to stop.
+       */
+      const attempt = (
+        step: PresetStep,
+        allowRepeat = false,
+        preferLarge = false,
+        floorOnly = false,
+        capScale = 1,
+      ): boolean => {
+        // Unlocked candidates, preferring the requested kind.
+        let pool = LIBRARY.filter(
+          (i) => i.type === step.type && tierUnlocked(i.tier, st.tier),
+        );
+        if (!pool.length) return false;
+        if (step.kind) {
+          const exact = pool.filter((i) => i.kind === step.kind);
+          // Only narrow to the exact kind when it's actually available. On a
+          // lower tier it may be locked, and then the step falls back to the
+          // rest of the category — so the quota below has to be applied to
+          // whatever gets picked, not to the kind we asked for.
+          if (exact.length) pool = exact;
+        }
+        // R22 — the coffee table should be 1/2 to 2/3 the length of the sofa.
+        if (step.kind === 'coffee') {
+          const sofa = inRoom.find((it) => ITEM_INDEX.get(it.itemId)?.kind === 'sofa');
+          if (sofa) {
+            const sf = ITEM_INDEX.get(sofa.itemId)!;
+            const fit = pool.filter(
+              (i) => i.w >= CLEARANCE.coffeeLenMin * sf.w && i.w <= CLEARANCE.coffeeLenMax * sf.w,
+            );
+            if (fit.length) pool = fit;
           }
-          // R22 — the coffee table should be 1/2 to 2/3 the length of the sofa.
-          if (step.kind === 'coffee') {
-            const sofa = inRoom.find((it) => ITEM_INDEX.get(it.itemId)?.kind === 'sofa');
-            if (sofa) {
-              const sf = ITEM_INDEX.get(sofa.itemId)!;
-              const fit = pool.filter(
-                (i) => i.w >= CLEARANCE.coffeeLenMin * sf.w && i.w <= CLEARANCE.coffeeLenMax * sf.w,
-              );
-              if (fit.length) pool = fit;
-            }
-          }
-          // Per-room quota, applied to the kind actually being placed: a kitchen
-          // gets one fridge and one range, not four fridges. Also skips anything
-          // already in the room, so a repeated step can't stack identical pieces.
-          const heldOf = (kind: string) =>
-            inRoom.filter((it) => ITEM_INDEX.get(it.itemId)?.kind === kind).length;
-          const eligible = pool.filter((p) => {
-            if (heldOf(p.kind) >= roomCap(p.type, p.kind)) return false;
-            return !inRoom.some((it) => it.itemId === p.id);
-          });
-          if (!eligible.length) continue;
-          const pick = eligible[Math.floor(Math.random() * eligible.length)];
+        }
+        // Per-room quota, applied to the kind actually being placed: a kitchen
+        // gets one fridge and one range, not four fridges. Also skips anything
+        // already in the room, so a repeated step can't stack identical pieces.
+        const heldOf = (kind: string) =>
+          inRoom.filter((it) => ITEM_INDEX.get(it.itemId)?.kind === kind).length;
+        const eligible = pool.filter((p) => {
+          // capScale lets a big room repeat its anchors. "One sofa" is right for
+          // a 22 m² living room and wrong for 120 m², where a second seating
+          // group is the difference between furnished and empty — and it is the
+          // per-kind cap, not the piece budget, that binds first there.
+          const cap = Math.max(1, Math.round(roomCap(p.type, p.kind) * capScale));
+          if (heldOf(p.kind) >= cap) return false;
+          // The top-up is chasing floor coverage, so a wall or ceiling piece
+          // cannot help it. Without this it filled a kitchen with wall cabinets
+          // — they are in a furniture category but never touch the floor, so
+          // neither the coverage target nor the piece cap ever moved.
+          if (floorOnly && p.mount !== 'floor') return false;
+          // The main pass never repeats a piece, so a step listed twice can't
+          // stack two identical sofas. The coverage top-up does allow it — a
+          // second nightstand is correct, and refusing repeats there is what
+          // left a large room unable to fill up at all.
+          return allowRepeat || !inRoom.some((it) => it.itemId === p.id);
+        });
+        if (!eligible.length) return false;
+        // Topping up is about reaching a share of the floor, so take the big
+        // pieces first: picking at random filled a large dining room with extra
+        // chairs, which are 0.2 m² each, and barely moved the number. The top
+        // three are still sampled at random so two fills of the same room do
+        // not come out identical.
+        const pick = preferLarge
+          ? [...eligible].sort((a, b) => b.w * b.d - a.w * a.d)[
+              Math.floor(Math.random() * Math.min(3, eligible.length))
+            ]
+          : eligible[Math.floor(Math.random() * eligible.length)];
 
-          // Respect the room's quantity budget before trying to place. A rug or
-          // a flat runner is walkable and never makes a room feel tight, so it
-          // is exempt — the guideline is about furniture standing on the floor.
-          const onFloor = pick.mount === 'floor' && !isFlat(pick);
-          if (onFloor && (floorPieces >= pieceCap || floorArea + pick.w * pick.d > budget)) {
-            overBudget++;
-            continue;
-          }
+        // Respect the room's quantity ceiling before trying to place. A rug or
+        // a flat runner is walkable and never makes a room feel tight, so it is
+        // exempt — the guideline is about furniture standing on the floor.
+        const onFloor = pick.mount === 'floor' && !isFlat(pick);
+        if (onFloor && (floorPieces >= pieceCap || floorArea + pick.w * pick.d > budget)) {
+          overBudget++;
+          return false;
+        }
         // Place against everything already in the room *and* other rooms.
         const spot = findBestSpot(st.grid, room.poly, items, ITEM_INDEX, pick, edges);
         if (!spot) {
           skipped++;
-          continue;
+          return false;
         }
         const it: PlacedItem = {
           uid: nextUid(),
@@ -1278,7 +1359,56 @@ export const useStore = create<AppState>((set, get) => ({
           floorPieces++;
           floorArea += pick.w * pick.d;
         }
+        return true;
+      };
+
+      for (const step of steps) {
+        // Accessory groups are rounded to an odd number; everything else takes
+        // the step's count as written.
+        const want = step.count ?? 1;
+        const count = step.group ? oddCount(want) : want;
+        for (let c = 0; c < count; c++) attempt(step);
+      }
+
+      // Coverage floor. The list above is a fixed count, so a big room came out
+      // nearly bare — a 120 m² living room held 21 items across 5% of its floor,
+      // which reads as an empty room rather than a furnished one. Keep going
+      // through the same list until the furniture takes up its share of the
+      // floor, or until nothing more fits. The share sits well under the
+      // ceiling above, so the two rules never argue.
+      // Aim a little past the floor. A candidate that will not quite fit is dropped
+      // rather than nudged, so a room can stop just short of the target it was
+      // aiming at; the small overshoot is what keeps "reaches the floor" true
+      // rather than usually-true. The ceiling above still caps the result.
+      const want = roomArea * COVERAGE_FLOOR * 1.1;
+      // How much more of each piece this room's size justifies. Same curve as
+      // the piece budget, so the two grow together.
+      const capScale = Math.sqrt(roomArea / 22.5);
+      // Once a room's own list is exhausted, top up from the major furniture
+      // categories. A 120 m² office runs out of desk-and-chair long before it
+      // runs out of floor, and a second bookcase is a better answer than a
+      // fifth small desk accessory.
+      const topUp: PresetStep[] = [
+        ...steps,
+        { type: 'seating' },
+        { type: 'tables' },
+        { type: 'storage' },
+      ];
+      let rounds = 0;
+      while (floorArea < want && floorPieces < pieceCap && rounds < 12) {
+        rounds++;
+        let progressed = false;
+        for (const step of topUp) {
+          if (floorArea >= want || floorPieces >= pieceCap) break;
+          // Only furniture counts towards floor coverage, so only furniture is
+          // added here. Letting the top-up reach decor too filled a room with
+          // 140 baskets — flat textiles are exempt from the ceiling, and small
+          // pieces have no cap, so they piled up without ever tripping a limit.
+          if (!FURNITURE_TYPES.has(step.type)) continue;
+          if (attempt(step, true, true, true, capScale)) progressed = true;
         }
+        // Nothing in the whole list fits any more — stop rather than spin.
+        if (!progressed) break;
       }
       // Post-pass: apply the relational design rules (conversation circle,
       // coffee-table gap, nightstands, art placement, rug anchoring, …). It

@@ -539,50 +539,52 @@ console.log('\nDoors come in real types:');
   ok('some have a push bar', doors.some((d) => d.spec.pushbar));
 }
 
-console.log('\nA door opens the wall it lands on:');
+console.log('\nA door moves freely, and opens whatever wall it is put in:');
 {
   const square = [
     { x: 0, y: 0 },
-    { x: 5, y: 0 },
-    { x: 5, y: 4 },
-    { x: 0, y: 4 },
+    { x: 6, y: 0 },
+    { x: 6, y: 5 },
+    { x: 0, y: 5 },
   ];
   S().clearRoom();
   S().askRoom(null);
   S().setMode('draw');
   S().setTier('max');
   S().addRoom(square);
-  const room = S().rooms[0];
   const door = LIBRARY.find((f) => f.type === 'doors' && f.kind === 'single')!;
-  const before = room.openings.filter((o) => o === 'door').length;
+  const suggested = S().rooms[0].openings.filter((o) => o === 'door').length;
 
+  // Placing one puts it wherever it fits — not snapped into a wall. That is what
+  // freely movable means.
   S().addItem(door.id);
   const placed = S().items[S().items.length - 1];
   ok('the door was placed', !!placed && S().items.length === 1);
-  ok('and it turned its wall into an opening',
-    S().rooms[0].openings.filter((o) => o === 'door').length === before + 1,
-    S().rooms[0].openings.join(','));
-
-  // It must sit on that wall, not float inside the room.
-  const onWall = S().rooms[0].poly.some((p, i) => {
+  const midRoom = !S().rooms[0].poly.some((p, i) => {
     const q = S().rooms[0].poly[(i + 1) % S().rooms[0].poly.length];
     const dx = q.x - p.x;
     const dy = q.y - p.y;
     const len2 = dx * dx + dy * dy;
     let t = ((placed.x - p.x) * dx + (placed.y - p.y) * dy) / len2;
     t = Math.max(0, Math.min(1, t));
-    const px = p.x + dx * t;
-    const py = p.y + dy * t;
-    // It stands in the wall's thickness, flush with its face — not on the centre
-  // line — so the tolerance is a wall's width rather than a millimetre.
-  return Math.hypot(placed.x - px, placed.y - py) < 0.2;
+    return Math.hypot(placed.x - (p.x + dx * t), placed.y - (p.y + dy * t)) < 0.2;
   });
-  ok('and it sits on that wall', onWall, `at (${placed.x.toFixed(2)},${placed.y.toFixed(2)})`);
+  ok('and it is not forced into a wall', midRoom, `at (${placed.x.toFixed(2)},${placed.y.toFixed(2)})`);
+
+  // Put it in a wall and it becomes an opening; take it out and the wall closes.
+  S().tryMoveRaw(placed.uid, 3, 0.06);
+  const inWall = S().rooms[0].openings.filter((o) => o === 'door').length;
+  ok('put into a wall it becomes an opening', inWall >= suggested, S().rooms[0].openings.join(','));
+
+  S().tryMoveRaw(placed.uid, 3, 2.5);
+  ok('and taken back out the wall closes again',
+    S().rooms[0].openings.filter((o) => o === 'door').length <= inWall,
+    S().rooms[0].openings.join(','));
 
   S().select(placed.uid);
   S().removeSelected();
-  ok('deleting the door puts the wall back',
-    S().rooms[0].openings.filter((o) => o === 'door').length === before,
+  ok('deleting it leaves the suggested openings alone',
+    S().rooms[0].openings.filter((o) => o === 'door').length === suggested,
     S().rooms[0].openings.join(','));
 
   S().setWallBuild(false);
