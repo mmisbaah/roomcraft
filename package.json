@@ -1,7 +1,7 @@
 {
   "name": "roomcraft",
   "private": true,
-  "version": "0.3.8",
+  "version": "0.3.9",
   "type": "module",
   "description": "Draw your floorplan, AI fills it with furniture - 2D and 3D DIY interior design",
   "main": "electron-main.cjs",

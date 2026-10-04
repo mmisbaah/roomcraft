@@ -900,7 +900,7 @@ const CLOSET = build('closet', 'floor', { c: [...WOOD, ...METAL, ...LIGHT], a: [
 // real differences — how they swing, how much floor they give back, whether
 // they are glazed. Mount is 'wall' and the footprint depth is the leaf
 // thickness, so a door sits in an opening the way it would on site.
-const DOORS = build('doors', 'wall', { c: [...WOOD, ...LIGHT, ...WOOD_DARK], a: [...BRASS, ...METAL, ...WOOD_DARK] }, [
+const DOORS = build('doors', 'opening', { c: [...WOOD, ...LIGHT, ...WOOD_DARK], a: [...BRASS, ...METAL, ...WOOD_DARK] }, [
   { n: 'Single Swing Door', k: 'single', s: 'Classic', w: 0.9, d: 0.05, h: 2.05, sp: { leaves: 1, swing: 'left', panel: 2 } },
   { n: 'Single Door, Hinged Right', k: 'single', s: 'Modern', w: 0.9, d: 0.05, h: 2.05, sp: { leaves: 1, swing: 'right', flush: true } },
   { n: 'Double Swing Door', k: 'double', s: 'Classic', w: 1.6, d: 0.05, h: 2.05, sp: { leaves: 2, panel: 2 } },

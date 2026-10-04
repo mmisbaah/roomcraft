@@ -3743,6 +3743,17 @@ export function FurnitureBody({ item }: { item: FurnItem }) {
 function Hitbox({ item }: { item: FurnItem }) {
   const w = item.w + 0.06;
   const d = item.d + 0.06;
+  if (item.mount === 'opening') {
+    // A door is a floor-to-lintel opening, so its click target has to be the
+    // whole thing — a slab at the base would be almost impossible to hit.
+    const hh = item.h || 2.05;
+    return (
+      <mesh position={[0, hh / 2, 0]}>
+        <boxGeometry args={[w + 0.1, hh, d + 0.3]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+    );
+  }
   if (item.mount === 'wall') {
     const hh = wallHeight(item) + 0.1;
     return (
@@ -3795,6 +3806,10 @@ export function Furniture({
 
   const baseY = useMemo(() => {
     if (!item) return 0;
+    // A door stands on the floor inside its opening. Wall items hang at picture
+    // height, so anchoring a 2 m door the same way left it floating above the
+    // wall with nothing beneath it.
+    if (item.mount === 'opening') return 0;
     if (item.mount === 'wall') return item.h;
     if (item.mount === 'ceiling') return CEIL_H - (item.h || 0.4);
     if (item.mount === 'surface') return supportAt(items, ITEM_INDEX, p.x, p.y) ?? 0;
@@ -3806,6 +3821,9 @@ export function Furniture({
   const maxDim = Math.max(item.w, item.d);
   const flat = !!item.spec.rug;
   const isWall = item.mount === 'wall';
+  // A door's selection box has to cover the whole opening, from the floor up,
+  // not just the leaf — otherwise selecting a door highlights a strip of wall.
+  const isOpening = item.mount === 'opening';
   const isCeil = item.mount === 'ceiling';
 
   return (
@@ -3839,13 +3857,21 @@ export function Furniture({
         <Hitbox item={item} />
         <FurnitureBody item={viewItem} />
         {selected &&
-          (isWall || isCeil ? (
-            <mesh position={[0, 0, isWall ? 0.05 : (item.h || 0.4) / 2 - 0.15]}>
+          (isWall || isCeil || isOpening ? (
+            <mesh
+              position={[
+                0,
+                isOpening ? (item.h || 2.05) / 2 : 0,
+                isWall || isOpening ? 0.05 : (item.h || 0.4) / 2 - 0.15,
+              ]}
+            >
               <boxGeometry
                 args={
-                  isWall
-                    ? [item.w + 0.14, wallHeight(item) + 0.14, item.d + 0.34]
-                    : [item.w + 0.14, (item.h || 0.4) + 0.4, item.d + 0.14]
+                  isOpening
+                    ? [item.w + 0.1, (item.h || 2.05) + 0.08, item.d + 0.34]
+                    : isWall
+                      ? [item.w + 0.14, wallHeight(item) + 0.14, item.d + 0.34]
+                      : [item.w + 0.14, (item.h || 0.4) + 0.4, item.d + 0.14]
                 }
               />
               <meshBasicMaterial color="#4f6df5" transparent opacity={0.2} depthWrite={false} />

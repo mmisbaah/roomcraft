@@ -83,6 +83,67 @@ function makeGrid(rooms: Room[], walls: BuiltWall[]): Grid {
 }
 
 /** Room edges + built partitions, so wall-mounted art/sconces can use either. */
+/**
+ * A door is an opening, not a picture of a door hung on the wall.
+ *
+ * When one lands on a wall it turns that stretch of wall into an opening —
+ * jambs and a head with a hole between — so the leaf fills a real gap instead
+ * of sitting on solid plaster. Returns the rooms with the edge converted, or
+ * unchanged when the door is not close enough to a wall to be in one.
+ */
+function doorEdgeIndex(poly: Vec2[], x: number, y: number): number {
+  let best = -1;
+  let bestD = Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    const d = distPointSeg({ x, y }, poly[i], poly[(i + 1) % poly.length]);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  return bestD <= 0.5 ? best : -1;
+}
+
+function withDoorOpening(rooms: Room[], roomId: string, x: number, y: number): Room[] {
+  return rooms.map((r) => {
+    if (r.id !== roomId) return r;
+    const i = doorEdgeIndex(r.poly, x, y);
+    if (i < 0) return r;
+    if (r.openings[i] === 'door') return r;
+    return { ...r, openings: r.openings.map((o, k) => (k === i ? 'door' : o)) };
+  });
+}
+
+/**
+ * Put a wall back if the last door standing in its opening has gone, so deleting
+ * a door does not leave a hole with nothing in it.
+ *
+ * Only the one edge the door occupied is considered. A room's openings are
+ * seeded with a suggested door that no door object has claimed, and sweeping
+ * every door-looking edge would close those too — turning one deletion into a
+ * plan-wide rewrite.
+ */
+function releaseDoorEdge(
+  rooms: Room[],
+  roomId: string,
+  x: number,
+  y: number,
+  remaining: PlacedItem[],
+): Room[] {
+  return rooms.map((r) => {
+    if (r.id !== roomId) return r;
+    const idx = doorEdgeIndex(r.poly, x, y);
+    if (idx < 0 || r.openings[idx] !== 'door') return r;
+    const stillThere = remaining.some((it) => {
+      if (it.roomId !== r.id) return false;
+      if (ITEM_INDEX.get(it.itemId)?.type !== 'doors') return false;
+      return doorEdgeIndex(r.poly, it.x, it.y) === idx;
+    });
+    if (stillThere) return r;
+    return { ...r, openings: r.openings.map((o, k) => (k === idx ? 'wall' : o)) };
+  });
+}
+
 export function edgesOf(poly: Vec2[], openings: EdgeKind[], walls: BuiltWall[] = []): EdgeInfo[] {
   const base = poly.map((a, i) => ({ a, b: poly[(i + 1) % poly.length], kind: openings[i] ?? 'wall' }));
   return [...base, ...walls.map((w) => ({ a: w.a, b: w.b, kind: w.kind }))];
@@ -418,18 +479,33 @@ function moveItem(
 
   // Wall pieces stay anchored to the room they were placed in; free-standing
   // pieces adopt whichever room contains the drop point.
-  const dest = item.mount === 'wall' ? own : roomsAt(st, { x, y })[0] ?? own;
+  const dest = item.mount === 'wall' || item.mount === 'opening' ? own : roomsAt(st, { x, y })[0] ?? own;
   const edges = edgesOf(dest.poly, dest.openings, st.walls);
 
-  if (item.mount === 'wall') {
+  if (item.mount === 'wall' || item.mount === 'opening') {
     const spot = projectToWall(own.poly, edges, item, x, y);
     if (!spot) return false;
     if (!canPlace(st.grid, own.poly, st.items, ITEM_INDEX, item, spot.x, spot.y, spot.rot, uid))
       return false;
+    const items = st.items.map((i) =>
+      i.uid === uid ? { ...i, x: spot.x, y: spot.y, rot: spot.rot } : i,
+    );
+    // A dragged door opens the wall it lands on and closes the one it left.
+    const isDoor = item.type === 'doors';
+    // Opening the wall it moved to is not enough — the wall it moved off has to
+    // be closed again, or dragging a door across a room leaves a hole behind it.
+    const rooms = isDoor
+      ? releaseDoorEdge(
+          withDoorOpening(st.rooms, own.id, spot.x, spot.y),
+          own.id,
+          target.x,
+          target.y,
+          items,
+        )
+      : st.rooms;
     set({
-      items: st.items.map((i) =>
-        i.uid === uid ? { ...i, x: spot.x, y: spot.y, rot: spot.rot } : i,
-      ),
+      items,
+      ...(isDoor && rooms !== st.rooms ? { rooms, grid: makeGrid(rooms, st.walls) } : {}),
     });
     return true;
   }
@@ -933,7 +1009,12 @@ export const useStore = create<AppState>((set, get) => ({
       rot: spot.rot,
       colorIdx: 0,
     };
-    set({ items: [...st.items, placed], selected: placed.uid });
+    const rooms = item.type === 'doors' ? withDoorOpening(st.rooms, room.id, spot.x, spot.y) : st.rooms;
+    set({
+      items: [...st.items, placed],
+      selected: placed.uid,
+      ...(item.type === 'doors' ? { rooms, grid: makeGrid(rooms, st.walls) } : {}),
+    });
     toast(get, set, `${item.name} placed.`);
   },
 
@@ -957,17 +1038,30 @@ export const useStore = create<AppState>((set, get) => ({
     if (!item) return;
     const edges = edgesOf(room.poly, room.openings, st.walls);
 
-    if (item.mount === 'wall') {
-      // Wall pieces hop to the next wall that fits.
+    if (item.mount === 'wall' || item.mount === 'opening') {
+      // Wall pieces hop to the next wall that fits. A door does the same, and
+      // takes its opening with it — the wall it leaves has to close again.
       const spot = nextWallSpot(room.poly, st.items, ITEM_INDEX, item, edges, target.x, target.y);
       if (!spot) {
         toast(get, set, 'No other wall fits this piece.');
         return;
       }
+      const items = st.items.map((i) =>
+        i.uid === target.uid ? { ...i, x: spot.x, y: spot.y, rot: spot.rot } : i,
+      );
+      const rooms =
+        item.type === 'doors'
+          ? releaseDoorEdge(
+              withDoorOpening(st.rooms, room.id, spot.x, spot.y),
+              room.id,
+              target.x,
+              target.y,
+              items,
+            )
+          : st.rooms;
       set({
-        items: st.items.map((i) =>
-          i.uid === target.uid ? { ...i, x: spot.x, y: spot.y, rot: spot.rot } : i,
-        ),
+        items,
+        ...(item.type === 'doors' ? { rooms, grid: makeGrid(rooms, st.walls) } : {}),
       });
       toast(get, set, 'Moved to the next wall.');
       return;
@@ -1004,14 +1098,30 @@ export const useStore = create<AppState>((set, get) => ({
       return;
     }
     const copy: PlacedItem = { ...target, uid: nextUid(), x: spot.x, y: spot.y, rot: spot.rot };
-    set({ items: [...st.items, copy], selected: copy.uid });
+    const rooms = item.type === 'doors' ? withDoorOpening(st.rooms, copy.roomId, spot.x, spot.y) : st.rooms;
+    set({
+      items: [...st.items, copy],
+      selected: copy.uid,
+      ...(item.type === 'doors' ? { rooms, grid: makeGrid(rooms, st.walls) } : {}),
+    });
     toast(get, set, `${item.name} duplicated.`);
   },
 
   removeSelected: () => {
     const st = get();
     if (!st.selected) return;
-    set({ items: st.items.filter((i) => i.uid !== st.selected), selected: null });
+    const gone = st.items.find((i) => i.uid === st.selected);
+    const items = st.items.filter((i) => i.uid !== st.selected);
+    // Take the wall back if the door that opened it is the one being removed.
+    const rooms =
+      gone && ITEM_INDEX.get(gone.itemId)?.type === 'doors' && gone.roomId
+        ? releaseDoorEdge(st.rooms, gone.roomId, gone.x, gone.y, items)
+        : st.rooms;
+    set({
+      items,
+      selected: null,
+      ...(rooms !== st.rooms ? { rooms, grid: makeGrid(rooms, st.walls) } : {}),
+    });
   },
 
   setColorIdx: (uid, idx) => {

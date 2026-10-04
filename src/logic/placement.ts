@@ -200,7 +200,7 @@ export function canPlace(
   rot: number,
   excludeUid?: string,
 ): boolean {
-  if (item.mount === 'wall') {
+  if (item.mount === 'wall' || item.mount === 'opening') {
     return rotRectInsidePoly(poly, x, y, item.w, item.d, rot);
   }
   if (item.mount === 'ceiling') {
@@ -272,7 +272,7 @@ export function canPlaceRaw(
   rot: number,
   excludeUid?: string,
 ): boolean {
-  if (item.mount === 'wall') {
+  if (item.mount === 'wall' || item.mount === 'opening') {
     return rotRectInsidePoly(poly, x, y, item.w, item.d, rot);
   }
   if (item.mount === 'ceiling') {
@@ -729,6 +729,9 @@ export function findBestSpot(
 ): Spot | null {
   switch (item.mount) {
     case 'wall':
+    // A door snaps to a wall like anything else hung on one, but it stands on
+    // the floor once it is there.
+    case 'opening':
       return findWallSpot(poly, items, byId, item, edges);
     case 'ceiling':
       return findCeilingSpot(grid, poly, items, byId, item);

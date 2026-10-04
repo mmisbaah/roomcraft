@@ -524,7 +524,10 @@ console.log('\nDoors come in real types:');
 {
   const doors = LIBRARY.filter((f) => f.type === 'doors');
   ok('the library holds a set of doors', doors.length === 20, `${doors.length}`);
-  ok('every door is wall-mounted', doors.every((d) => d.mount === 'wall'));
+  // A door stands on the floor inside a hole. Anchoring it like a hung picture
+  // put its base at its own height, so a 2.05 m door floated above the wall.
+  ok('every door stands on the floor, not on the wall', doors.every((d) => d.mount === 'opening'));
+  ok('no door is a hung wall item', doors.every((d) => d.mount !== 'wall'));
   ok('every door has artwork', doors.every((d) => resolveShape(d)));
   const kinds = new Set(doors.map((d) => d.kind));
   ok('and they are not all the same thing', kinds.size >= 16, `${kinds.size} distinct kinds`);
@@ -534,6 +537,56 @@ console.log('\nDoors come in real types:');
   ok('some fold', doors.some((d) => d.spec.fold));
   ok('some pocket into the wall', doors.some((d) => d.spec.pocket));
   ok('some have a push bar', doors.some((d) => d.spec.pushbar));
+}
+
+console.log('\nA door opens the wall it lands on:');
+{
+  const square = [
+    { x: 0, y: 0 },
+    { x: 5, y: 0 },
+    { x: 5, y: 4 },
+    { x: 0, y: 4 },
+  ];
+  S().clearRoom();
+  S().askRoom(null);
+  S().setMode('draw');
+  S().setTier('max');
+  S().addRoom(square);
+  const room = S().rooms[0];
+  const door = LIBRARY.find((f) => f.type === 'doors' && f.kind === 'single')!;
+  const before = room.openings.filter((o) => o === 'door').length;
+
+  S().addItem(door.id);
+  const placed = S().items[S().items.length - 1];
+  ok('the door was placed', !!placed && S().items.length === 1);
+  ok('and it turned its wall into an opening',
+    S().rooms[0].openings.filter((o) => o === 'door').length === before + 1,
+    S().rooms[0].openings.join(','));
+
+  // It must sit on that wall, not float inside the room.
+  const onWall = S().rooms[0].poly.some((p, i) => {
+    const q = S().rooms[0].poly[(i + 1) % S().rooms[0].poly.length];
+    const dx = q.x - p.x;
+    const dy = q.y - p.y;
+    const len2 = dx * dx + dy * dy;
+    let t = ((placed.x - p.x) * dx + (placed.y - p.y) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    const px = p.x + dx * t;
+    const py = p.y + dy * t;
+    // It stands in the wall's thickness, flush with its face — not on the centre
+  // line — so the tolerance is a wall's width rather than a millimetre.
+  return Math.hypot(placed.x - px, placed.y - py) < 0.2;
+  });
+  ok('and it sits on that wall', onWall, `at (${placed.x.toFixed(2)},${placed.y.toFixed(2)})`);
+
+  S().select(placed.uid);
+  S().removeSelected();
+  ok('deleting the door puts the wall back',
+    S().rooms[0].openings.filter((o) => o === 'door').length === before,
+    S().rooms[0].openings.join(','));
+
+  S().setWallBuild(false);
+  S().clearRoom();
 }
 
 console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`} (${checks} total)`);

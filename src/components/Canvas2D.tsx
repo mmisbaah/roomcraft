@@ -26,7 +26,7 @@ const EDGE_KIND_COLOR: Record<EdgeKind, string> = {
 /** Draw/hit order: rug(0) → floor(1) → surface(2) → wall(3) → ceiling(4). */
 function rankOf(f: FurnItem): number {
   if (f.mount === 'floor') return f.spec.rug ? 0 : 1;
-  return f.mount === 'surface' ? 2 : f.mount === 'wall' ? 3 : 4;
+  return f.mount === 'surface' ? 2 : f.mount === 'opening' ? 1 : f.mount === 'wall' ? 3 : 4;
 }
 
 /** Bathroom fixtures get recognisable plan symbols instead of a back strip. */
@@ -305,6 +305,46 @@ export default function Canvas2D() {
       ctx.rotate((-it.rot * Math.PI) / 180);
       if (isCeil) ctx.globalAlpha = 0.55;
 
+      if (f.mount === 'opening') {
+        // A door in plan is a gap in the wall with a leaf and a swing. The wall
+        // itself already draws the opening (its edge is set to a door), so this
+        // draws what sits in it — the leaf line and, for a hinged door, the arc
+        // it sweeps through.
+        const half = rw / 2;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = Math.max(2, scale * 0.05);
+        // leaf, drawn from one jamb across the opening
+        ctx.beginPath();
+        ctx.moveTo(-half, 0);
+        ctx.lineTo(half, 0);
+        ctx.stroke();
+        if (f.spec.glazing || f.spec.slider || f.spec.pocket) {
+          ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+          ctx.lineWidth = Math.max(1.2, scale * 0.022);
+          ctx.beginPath();
+          ctx.moveTo(-half * 0.62, 0);
+          ctx.lineTo(half * 0.62, 0);
+          ctx.stroke();
+        } else {
+          // swing arc from the hinge side
+          ctx.strokeStyle = 'rgba(20,26,40,0.4)';
+          ctx.lineWidth = Math.max(1, scale * 0.018);
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.arc(-half, 0, rw, -Math.PI / 2, 0);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        if (st.selected === it.uid) {
+          ctx.strokeStyle = '#4f6df5';
+          ctx.lineWidth = 2.5;
+          roundRectPath(ctx, -half - 3, -Math.max(6, rd) - 3, rw + 6, Math.max(12, rd * 2) + 6, 6);
+          ctx.stroke();
+        }
+        ctx.restore();
+        continue;
+      }
+
       if (f.mount === 'floor' && f.spec.rug) {
         ctx.globalAlpha = 0.92;
         if (f.spec.round) {
@@ -503,7 +543,7 @@ export default function Canvas2D() {
         tb.style.top = `${sy(sel.y) - halfD - 14}px`;
         const rotBtn = tb.querySelector('[data-act="rotate"]') as HTMLElement | null;
         if (rotBtn && f) {
-          rotBtn.textContent = f.mount === 'wall' ? 'Next wall' : 'Rotate 90°';
+          rotBtn.textContent = f.mount === 'wall' || f.mount === 'opening' ? 'Next wall' : 'Rotate 90°';
         }
         void halfW;
       }

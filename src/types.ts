@@ -9,7 +9,13 @@ export type Tier = 'free' | 'pro' | 'max';
  *  - ceiling  : hangs from the ceiling (chandeliers, hanging plants…)
  *  - surface  : sits on a table/top (table lamps, vases…); falls back to floor
  */
-export type Mount = 'floor' | 'wall' | 'ceiling' | 'surface';
+/**
+ * Where an item attaches. `opening` is a door: it stands on the floor *inside*
+ * a hole in a wall, which is a different thing from `wall` — a wall item hangs
+ * at picture height, and treating a 2 m door that way left it floating above
+ * the wall with nothing under it.
+ */
+export type Mount = 'floor' | 'wall' | 'opening' | 'ceiling' | 'surface';
 
 /** Library category ids (one section each in the sidebar, 20 items each). */
 export type FurnType =
@@ -276,6 +282,7 @@ export const TYPE_ORDER: FurnType[] = [
 export const MOUNT_LABEL: Record<Mount, string> = {
   floor: 'Floor',
   wall: 'Wall-mounted',
+  opening: 'Door opening',
   ceiling: 'Ceiling-mounted',
   surface: 'Tabletop',
 };
