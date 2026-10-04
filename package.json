@@ -15,6 +15,7 @@
     "test:presets": "esbuild test-presets.ts --bundle --platform=node --format=cjs --outfile=test-presets.cjs --log-level=error && node test-presets.cjs",
     "test:rules": "esbuild test-rules.ts --bundle --platform=node --format=cjs --outfile=test-rules.cjs --log-level=error && node test-rules.cjs",
     "test:coverage": "esbuild test-coverage.ts --bundle --platform=node --format=cjs --outfile=test-coverage.cjs --log-level=error && node test-coverage.cjs",
+    "test:roomrules": "esbuild test-roomrules.ts --bundle --platform=node --format=cjs --outfile=test-roomrules.cjs --log-level=error && node test-roomrules.cjs",
     "test:grab": "esbuild test-wallgrab.ts --bundle --platform=node --format=cjs --outfile=test-wallgrab.cjs --log-level=error && node test-wallgrab.cjs",
     "test:enclose": "esbuild test-enclose.ts --bundle --platform=node --format=cjs --outfile=test-enclose.cjs --log-level=error && node test-enclose.cjs",
     "test:wallroom": "esbuild test-wallroom.ts --bundle --platform=node --format=cjs --outfile=test-wallroom.cjs --log-level=error && node test-wallroom.cjs",

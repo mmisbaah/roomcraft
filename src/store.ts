@@ -38,10 +38,13 @@ import {
   floorPieceLimit,
   isFlat,
   oddCount,
+  ceilingLightsFor,
   COVERAGE_FLOOR,
+  DUPLICATE_FREE_AREA_MAX,
   type EdgeInfo,
   type PresetStep,
 } from './logic/placement';
+import { repeatable } from './logic/roomrules';
 import { activateLicense, getLicense, startCheckout } from './lib/checkout';
 import { CLEARANCE, RULES } from './logic/rules';
 import type {
@@ -1241,10 +1244,22 @@ export const useStore = create<AppState>((set, get) => ({
       // The description is read alongside the room's purpose, so "small galley
       // for two, opens to the lounge" narrows the objects the way the purpose
       // alone cannot.
+      const roomArea = Math.abs(polyArea(room.poly));
       const steps = withCeilingLight([
         ...(PRESETS[room.kind] ?? PRESETS.living),
         ...stepsFromNote(room.note, room.kind),
       ]);
+      // Rule 7 — one ceiling light per 14 square feet. The ceiling-light steps
+      // the presets already carry are replaced by the computed count, and they
+      // are deliberately allowed to repeat: a room lit by rule 7 cannot also
+      // obey a rule against duplicates.
+      const lights = ceilingLightsFor(roomArea);
+      // Recessed, because at this density they are downlights in a grid, not
+      // eighteen chandeliers. Repeats are allowed for ceiling lights (see the
+      // duplicate rule below): the library holds two recessed fittings and rule
+      // 7 can ask for eighteen.
+      for (let i = 0; i < lights; i++) steps.push({ type: 'ceilight', kind: 'recessed' });
+      const dupFree = roomArea <= DUPLICATE_FREE_AREA_MAX;
       const edges = edgesOf(room.poly, room.openings, st.walls);
       const inRoom: PlacedItem[] = [];
 
@@ -1252,7 +1267,6 @@ export const useStore = create<AppState>((set, get) => ({
       // crowded by, so the two limits are counted against it only: wall, ceiling
       // and tabletop pieces add to the sense of a finished room without taking
       // any floor away, and stopping those short would just look unfinished.
-      const roomArea = Math.abs(polyArea(room.poly));
       const budget = coverageBudget(roomArea) * roomArea;
       const pieceCap = floorPieceLimit(room.kind, roomArea);
       let floorArea = 0;
@@ -1269,6 +1283,7 @@ export const useStore = create<AppState>((set, get) => ({
         preferLarge = false,
         floorOnly = false,
         capScale = 1,
+        dupFreeRoom = false,
       ): boolean => {
         // Unlocked candidates, preferring the requested kind.
         let pool = LIBRARY.filter(
@@ -1304,8 +1319,14 @@ export const useStore = create<AppState>((set, get) => ({
           // a 22 m² living room and wrong for 120 m², where a second seating
           // group is the difference between furnished and empty — and it is the
           // per-kind cap, not the piece budget, that binds first there.
-          const cap = Math.max(1, Math.round(roomCap(p.type, p.kind) * capScale));
-          if (heldOf(p.kind) >= cap) return false;
+          // The ceiling-light count is fixed by rule 7, not by taste: one per 14 square
+          // feet. The per-kind cap exists to stop a room collecting nine of the
+          // same chair, and applying it to downlights meant a 48 m² room asked
+          // for 38 lights and got 3.
+          if (step.type !== 'ceilight') {
+            const cap = Math.max(1, Math.round(roomCap(p.type, p.kind) * capScale));
+            if (heldOf(p.kind) >= cap) return false;
+          }
           // The top-up is chasing floor coverage, so a wall or ceiling piece
           // cannot help it. Without this it filled a kitchen with wall cabinets
           // — they are in a furniture category but never touch the floor, so
@@ -1315,7 +1336,28 @@ export const useStore = create<AppState>((set, get) => ({
           // stack two identical sofas. The coverage top-up does allow it — a
           // second nightstand is correct, and refusing repeats there is what
           // left a large room unable to fill up at all.
-          return allowRepeat || !inRoom.some((it) => it.itemId === p.id);
+          if (allowRepeat) return true;
+          // Rule 7 needs ceiling lights to repeat — a room lit to that density
+          // cannot also obey a rule against duplicates. This applies in every
+          // room, not just the duplicate-free ones: the library holds two
+          // recessed fittings and rule 7 asks for ninety-three of them.
+          if (step.type === 'ceilight') return true;
+          if (dupFreeRoom) {
+            // Rule 5 is about furniture. Two cushions on a sofa or a pair of
+            // sconces is normal; two identical side tables is not.
+            if (!FURNITURE_TYPES.has(p.type)) return true;
+            // The exceptions the rule allows.
+            if (repeatable(p)) return true;
+            // Duplicates are judged by kind, not by catalogue item: two different
+            // "Halo Side Table" rows are still two side tables.
+            const key = `${p.type}:${p.kind}`;
+            const already = inRoom.some((it) => {
+              const of = ITEM_INDEX.get(it.itemId);
+              return of ? `${of.type}:${of.kind}` === key : false;
+            });
+            if (already) return false;
+          }
+          return !inRoom.some((it) => it.itemId === p.id);
         });
         if (!eligible.length) return false;
         // Topping up is about reaching a share of the floor, so take the big
@@ -1367,7 +1409,7 @@ export const useStore = create<AppState>((set, get) => ({
         // the step's count as written.
         const want = step.count ?? 1;
         const count = step.group ? oddCount(want) : want;
-        for (let c = 0; c < count; c++) attempt(step);
+        for (let c = 0; c < count; c++) attempt(step, false, false, false, 1, dupFree);
       }
 
       // Coverage floor. The list above is a fixed count, so a big room came out
@@ -1383,7 +1425,7 @@ export const useStore = create<AppState>((set, get) => ({
       const want = roomArea * COVERAGE_FLOOR * 1.1;
       // How much more of each piece this room's size justifies. Same curve as
       // the piece budget, so the two grow together.
-      const capScale = Math.sqrt(roomArea / 22.5);
+      const capScale = dupFree ? 1 : Math.sqrt(roomArea / 22.5);
       // Once a room's own list is exhausted, top up from the major furniture
       // categories. A 120 m² office runs out of desk-and-chair long before it
       // runs out of floor, and a second bookcase is a better answer than a
@@ -1405,7 +1447,7 @@ export const useStore = create<AppState>((set, get) => ({
           // 140 baskets — flat textiles are exempt from the ceiling, and small
           // pieces have no cap, so they piled up without ever tripping a limit.
           if (!FURNITURE_TYPES.has(step.type)) continue;
-          if (attempt(step, true, true, true, capScale)) progressed = true;
+          if (attempt(step, true, true, true, capScale, dupFree)) progressed = true;
         }
         // Nothing in the whole list fits any more — stop rather than spin.
         if (!progressed) break;
@@ -1414,7 +1456,7 @@ export const useStore = create<AppState>((set, get) => ({
       // coffee-table gap, nightstands, art placement, rug anchoring, …). It
       // works on this room's items only — a bedroom's bed shouldn't be related
       // to the sofa two rooms away — then the results are copied back by uid.
-      refineLayout(st.grid, room.poly, inRoom, ITEM_INDEX, edges);
+      refineLayout(st.grid, room.poly, inRoom, ITEM_INDEX, edges, room.kind);
       for (const refined of inRoom) {
         const at = items.findIndex((i) => i.uid === refined.uid);
         if (at >= 0) items[at] = refined;

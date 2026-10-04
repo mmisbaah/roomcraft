@@ -46,6 +46,7 @@ jobs:
           npm run test:wallroom
           npm run test:rules
           npm run test:coverage
+          npm run test:roomrules
 
       - name: Build web app
         run: npm run build

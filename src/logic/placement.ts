@@ -8,6 +8,14 @@
 // over a table (or the room centre); surface items sit on a table top.
 
 import type { EdgeKind, FurnItem, FurnType, PlacedItem, RoomKind, Vec2 } from '../types';
+import {
+  cabinetsOnClearWall,
+  chairsFaceTables,
+  diningLayout,
+  livingConversation,
+  resolveOverlaps,
+  spaceChairs,
+} from './roomrules';
 import { clamp01, distPointSeg, pointInPoly, polyArea, polyCentroid, rotatedSize, segsCross } from './geometry';
 import { rectCells, type Grid } from './grid';
 import { CLEARANCE } from './rules';
@@ -83,7 +91,7 @@ export const isFlat = (f: FurnItem) => f.mount === 'floor' && !!f.spec.rug;
 const blocksFloor = (f: FurnItem) => f.mount === 'floor' && !f.spec.rug;
 
 /** Pairs that may share cells (chairs tucked under tables; rugs under anything). */
-function overlapsAllowed(a: FurnItem, b: FurnItem): boolean {
+export function overlapsAllowed(a: FurnItem, b: FurnItem): boolean {
   if (isFlat(a) || isFlat(b)) return true;
   const t = new Set([a.type, b.type]);
   return t.has('tables') && t.has('seating');
@@ -216,18 +224,19 @@ export function canPlace(
   const { w, d } = rotatedSize(item.w, item.d, rot);
   const cells = rectCells(grid, x, y, w, d);
   if (!cells) return false;
-  const flat = isFlat(item);
-  const others = items.filter((i) => i.uid !== excludeUid && !isFlat(byId.get(i.itemId) ?? item));
-  for (const idx of cells) {
-    if (grid.free[idx] !== 1) return false;
-    if (flat) continue;
-    for (const o of others) {
-      const f = byId.get(o.itemId);
-      if (!f || !blocksFloor(f) || overlapsAllowed(item, f)) continue;
-      const os = rotatedSize(f.w, f.d, o.rot);
-      const oc = rectCells(grid, o.x, o.y, os.w, os.d);
-      if (oc && oc.indexOf(idx) !== -1) return false;
-    }
+  for (const idx of cells) if (grid.free[idx] !== 1) return false;
+  if (isFlat(item)) return true;
+
+  // Exact rect overlap, not "do we share a grid cell". Two footprints can
+  // overlap by most of half a cell without sharing one, which let the fill
+  // stand a chair 30 cm inside a sideboard. Walls stay on the coarse grid —
+  // there the cell is the wall — but furniture is measured properly.
+  for (const o of items) {
+    if (o.uid === excludeUid) continue;
+    const f = byId.get(o.itemId);
+    if (!f || !blocksFloor(f) || isFlat(f) || overlapsAllowed(item, f)) continue;
+    const os = rotatedSize(f.w, f.d, o.rot);
+    if (rectsOverlap(x, y, w, d, o.x, o.y, os.w, os.d)) return false;
   }
   return true;
 }
@@ -826,7 +835,7 @@ function nearestEdge(edges: EdgeInfo[], x: number, y: number, skipKind?: EdgeKin
 }
 
 /** Exact AABB overlap test for 90°-multiple placements (2 cm slack). */
-function rectsOverlap(
+export function rectsOverlap(
   ax: number,
   ay: number,
   aw: number,
@@ -857,7 +866,7 @@ function cellsFree(grid: Grid, poly: Vec2[], item: FurnItem, x: number, y: numbe
  * share a grid cell when their footprints don't actually touch — required
  * for the 5–15 cm nightstand gap and chair nudges.
  */
-function strictFit(
+export function strictFit(
   grid: Grid,
   poly: Vec2[],
   items: PlacedItem[],
@@ -898,6 +907,7 @@ export function refineLayout(
   items: PlacedItem[],
   byId: Map<string, FurnItem>,
   edges: EdgeInfo[],
+  roomKind: RoomKind = 'living',
 ): void {
   const sofa = items.find((it) => byId.get(it.itemId)?.kind === 'sofa');
   const bed = items.find((it) => byId.get(it.itemId)?.type === 'beds');
@@ -926,6 +936,25 @@ export function refineLayout(
   tuckShowerIntoCorner(grid, poly, items, byId, edges);
   mirrorOverVanity(poly, items, byId, edges);
   towelRackByFixture(poly, items, byId, edges);
+
+  // Written room rules — relationships between pieces rather than any one
+  // piece. Turning and seating come first, spacing last: rotating a chair
+  // changes its footprint, so a chair spaced out and then turned is a chair
+  // that has walked into whatever it was given room from.
+  chairsFaceTables(grid, poly, items, byId);
+  if (roomKind === 'living') livingConversation(grid, poly, items, byId);
+  // Cabinets settle before the dining table does. A sideboard that arrives
+  // afterwards can take the one wall a chair needed to sit against, and then
+  // the table can only be seated three chairs to the floor.
+  cabinetsOnClearWall(grid, poly, items, byId);
+  if (roomKind === 'dining') diningLayout(grid, poly, items, byId);
+  spaceChairs(grid, poly, items, byId, CHAIR_WALK_SPACE);
+  resolveOverlaps(grid, poly, items, byId);
+  // The repair pass may have turned something to get it out of a neighbour, so
+  // facing is re-applied — and then a final slide-only sweep, which cannot
+  // undo it, makes sure the room is still free of overlaps.
+  chairsFaceTables(grid, poly, items, byId);
+  resolveOverlaps(grid, poly, items, byId, { rotate: false });
 }
 
 // ---------------------------------------------------------------------------
@@ -1674,6 +1703,37 @@ export function coverageBudget(roomArea: number): number {
 
 /** The floor area the 4-8 piece guideline is written about. */
 const TYPICAL_ROOM_AREA = 22.5;
+
+/**
+ * Clear floor a chair needs around itself to be walked round and sat down on.
+ *
+ * A chair hard against a wall cannot be pulled out, which is the difference
+ * between a seat and an obstruction.
+ */
+export const CHAIR_WALK_SPACE = 0.6;
+
+/**
+ * One ceiling light per 14 square feet — 1.30 m².
+ *
+ * Taken literally, as written: that is a lot of fittings, and a 22.5 m² room
+ * gets seventeen of them. It reads like a specification for downlights rather
+ * than a mistake, so it is implemented as given rather than quietly rescaled.
+ */
+export const CEILING_LIGHT_AREA = 14 * 0.092903;
+
+/** How many ceiling lights a room of this floor area gets. */
+export function ceilingLightsFor(area: number): number {
+  return Math.max(1, Math.ceil(area / CEILING_LIGHT_AREA));
+}
+
+/**
+ * Floor area above which a room may repeat pieces.
+ *
+ * The no-duplicates rule is right for a normal room and quietly impossible for a
+ * large one: without repeats a 120 m² pantry has a ceiling of about 1.6 m² of
+ * furniture, so the coverage floor could never be met.
+ */
+export const DUPLICATE_FREE_AREA_MAX = 40;
 
 /**
  * Floor-piece allowance for a room of this kind and size.
