@@ -7,14 +7,15 @@
 // in the middle of a busy wall is moved to a clear one. Each move is checked
 // before it is made, so a correction can never push a piece into something else.
 
-import { canPlace, strictFit, overlapsAllowed, rectsOverlap } from './placement';
+import { canPlace, strictFit, overlapsAllowed, rectsOverlap, gapAllowed, MIN_FLOOR_GAP } from './placement';
 import { distPointSeg } from './geometry';
-import { isFlat } from './placement';
+import { isFlat, isChair } from './placement';
 import type { Grid } from './grid';
 import type { FurnItem, PlacedItem, Vec2 } from '../types';
 
-/** Kinds that are a chair someone sits on — not a stool, bench or ottoman. */
-const CHAIR_KINDS = new Set(['dining', 'accent', 'armchair', 'office', 'desk']);
+// The chair predicate is defined alongside the floor gap and the chair limit,
+// where the other two rules that depend on it live.
+export { isChair };
 
 /** Kinds that count as "a table" for the purpose of facing one. */
 const TABLE_KINDS = new Set(['dining', 'round', 'oval', 'trestle', 'bar', 'banquet', 'desk', 'coffee', 'console', 'side']);
@@ -35,10 +36,6 @@ const CABINET_KINDS = new Set([
   'laundrywall',
   'pantrycab',
 ]);
-
-export function isChair(f: FurnItem): boolean {
-  return f.type === 'seating' && CHAIR_KINDS.has(f.kind);
-}
 
 export function isTable(f: FurnItem): boolean {
   if (f.type === 'tables' || f.type === 'dining') return TABLE_KINDS.has(f.kind);
@@ -277,11 +274,21 @@ export function diningLayout(
     return f && isChair(f) && f.mount === 'floor';
   });
   if (chairs.length < 4) return;
-  // The four that belong at the table are the four nearest it — the rest are
-  // occasional seating and have no business being tucked in.
-  const nearest = [...chairs]
-    .sort((a, b) => Math.hypot(a.x - table.x, a.y - table.y) - Math.hypot(b.x - table.x, b.y - table.y))
-    .slice(0, 4);
+  // The chairs that belong at the table are the dining chairs, nearest first —
+  // not simply the four nearest chairs. An occasional armchair can sit closer to
+  // the table than the fourth dining chair, but it is not the table's chair:
+  // seating it left the fourth place at the table empty and queued the rule's
+  // four around a table with three. The others are occasional seating and have
+  // no business being tucked in.
+  const byDistance = (a: PlacedItem, b: PlacedItem) =>
+    Math.hypot(a.x - table.x, a.y - table.y) - Math.hypot(b.x - table.x, b.y - table.y);
+  const tableChairs = chairs
+    .filter((c) => byId.get(c.itemId)!.kind === 'dining')
+    .sort(byDistance);
+  const occasional = chairs
+    .filter((c) => byId.get(c.itemId)!.kind !== 'dining')
+    .sort(byDistance);
+  const nearest = [...tableChairs, ...occasional].slice(0, 4);
 
   /** Two chairs per side, a third and two thirds along, clear of the table edge. */
   const seatsAround = (at: Vec2): Vec2[] => {
@@ -519,6 +526,25 @@ export function resolveOverlaps(
   byId: Map<string, FurnItem>,
   opts?: { rotate?: boolean },
 ): void {
+  // One scan is not enough. A correction can push a piece toward a third piece
+  // whose pair was compared earlier in that same scan, so the two of them are
+  // left 5 cm apart one line after something else was cleared — and the pair
+  // will not be looked at again. Scanning until nothing moves settles it: every
+  // move only ever separates pieces, so the process converges.
+  for (let pass = 0; pass < 4; pass++) {
+    if (!separateOnce(grid, poly, items, byId, opts)) break;
+  }
+}
+
+/** One scan over the pairs; returns true when anything moved. */
+function separateOnce(
+  grid: Grid,
+  poly: Vec2[],
+  items: PlacedItem[],
+  byId: Map<string, FurnItem>,
+  opts?: { rotate?: boolean },
+): boolean {
+  let moved = false;
   const solid = items.filter((i) => {
     const f = byId.get(i.itemId);
     return f && f.mount === 'floor' && !isFlat(f);
@@ -535,7 +561,18 @@ export function resolveOverlaps(
       // A chair tucked under its own table is meant to share space.
       if (overlapsAllowed(fa, fb)) continue;
       const eb = extent(b, fb);
-      if (!rectsOverlap(a.x, a.y, ea.hw * 2, ea.hd * 2, b.x, b.y, eb.hw * 2, eb.hd * 2)) continue;
+      // Closeness is the defect here as much as intersection. `need` is how
+      // short each axis is of where it should be once MIN_FLOOR_GAP is owed
+      // (zero for a chair at its table, a cabinet run, a nightstand at the
+      // bed), and the pair is in trouble only while *both* axes are short —
+      // clear a metre in x and 15 cm in y is 15 cm of air, which is the point.
+      // The 2 cm tolerance is the same slack the overlap test has always had:
+      // a pair that is 13 cm apart instead of 15 is not worth turning a chair
+      // for.
+      const g = gapAllowed(fa, fb) ? 0 : MIN_FLOOR_GAP;
+      const needX = ea.hw + eb.hw + g - Math.abs(a.x - b.x);
+      const needY = ea.hd + eb.hd + g - Math.abs(a.y - b.y);
+      if (needX <= 0.02 || needY <= 0.02) continue;
 
       // Who moves: the smaller piece, unless one of them is a cabinet. A cabinet
       // belongs against a wall, and sliding one into the middle of the room to
@@ -550,46 +587,83 @@ export function resolveOverlaps(
           : b;
       const other = mover === a ? b : a;
       const mf = mover === a ? fa : fb;
-      const pushX = Math.abs(a.x - b.x) < ea.hw + eb.hw - 0.02
-        ? (ea.hw + eb.hw - Math.abs(a.x - b.x)) / 2 + 0.03
-        : 0;
-      const pushY = Math.abs(a.y - b.y) < ea.hd + eb.hd - 0.02
-        ? (ea.hd + eb.hd - Math.abs(a.y - b.y)) / 2 + 0.03
-        : 0;
-      const axis: { dir: Vec2; cost: number }[] = [];
-      if (pushX > 0) axis.push({ dir: { x: Math.sign(mover.x - other.x) || 1, y: 0 }, cost: pushX });
-      if (pushY > 0) axis.push({ dir: { x: 0, y: Math.sign(mover.y - other.y) || 1 }, cost: pushY });
-      axis.sort((p, q) => p.cost - q.cost);
+      // Is the pair this correction was for actually settled now? Asked of the
+      // pair rather than of every piece in the room, because two pieces 20 cm
+      // apart do not overlap anything — a test for intersection alone would
+      // call the job done the moment they stopped touching.
+      const clearPair = (
+        mov: PlacedItem,
+        oth: PlacedItem,
+        movf: FurnItem,
+        othf: FurnItem,
+      ): boolean => {
+        const em = extent(mov, movf);
+        const eo = extent(oth, othf);
+        const apart =
+          em.hw + eo.hw + g - Math.abs(mov.x - oth.x) <= 0 ||
+          em.hd + eo.hd + g - Math.abs(mov.y - oth.y) <= 0;
+        return apart && !overlapsAny(mov, movf, items, byId);
+      };
 
-      for (const { dir, cost } of axis) {
-        // Start at the distance that actually clears the overlap, not at a step
-        // from where the piece is now. Asking strictFit about a position still
-        // inside the neighbour is pointless — it says no, as it must, and a
-        // pass that gave up there would leave the overlap exactly as it found
-        // it.
-        for (let t = cost; t <= cost + 1.5; t += 0.05) {
-          const x = mover.x + dir.x * t;
-          const y = mover.y + dir.y * t;
-          if (!strictFit(grid, poly, items, byId, mf, x, y, mover.rot, mover.uid)) continue;
-          mover.x = x;
-          mover.y = y;
-          if (!overlapsAny(mover, mf, items, byId)) break;
+      // Slide `mov` away from `oth`, starting each axis at the distance that
+      // actually meets the gap rather than at a step from where the piece is
+      // now — asking strictFit about a position still inside the neighbour is
+      // pointless, and a pass that gave up there would leave the pair exactly
+      // as it found it. A quarter turn is the fallback, and only for the
+      // pass that allows it: turning a chair to get it out of a sideboard
+      // would leave it facing the wrong way, breaking a rule this pass exists
+      // to protect.
+      const tryMove = (
+        mov: PlacedItem,
+        oth: PlacedItem,
+        movf: FurnItem,
+        othf: FurnItem,
+      ): boolean => {
+        const em = extent(mov, movf);
+        const eo = extent(oth, othf);
+        const axis: { dir: Vec2; cost: number }[] = [
+          {
+            dir: { x: Math.sign(mov.x - oth.x) || 1, y: 0 },
+            cost: em.hw + eo.hw + g - Math.abs(mov.x - oth.x) + 0.03,
+          },
+          {
+            dir: { x: 0, y: Math.sign(mov.y - oth.y) || 1 },
+            cost: em.hd + eo.hd + g - Math.abs(mov.y - oth.y) + 0.03,
+          },
+        ];
+        axis.sort((p, q) => p.cost - q.cost);
+        for (const { dir, cost } of axis) {
+          for (let t = cost; t <= cost + 1.5; t += 0.05) {
+            const x = mov.x + dir.x * t;
+            const y = mov.y + dir.y * t;
+            if (!strictFit(grid, poly, items, byId, movf, x, y, mov.rot, mov.uid)) continue;
+            mov.x = x;
+            mov.y = y;
+            moved = true;
+            if (clearPair(mov, oth, movf, othf)) return true;
+          }
+          if (clearPair(mov, oth, movf, othf)) return true;
         }
-        if (!overlapsAny(mover, mf, items, byId)) break;
-      }
-      if (!overlapsAny(mover, mf, items, byId)) continue;
+        if (!allowRotate) return false;
+        // A turn is only kept when it settles the pair — otherwise the piece
+        // ends up standing some other way round for no gain at all.
+        const rot0 = mov.rot;
+        for (const rot of [90, 180, 270]) {
+          if (!strictFit(grid, poly, items, byId, movf, mov.x, mov.y, rot, mov.uid)) continue;
+          mov.rot = rot;
+          if (clearPair(mov, oth, movf, othf)) return true;
+          mov.rot = rot0;
+        }
+        return false;
+      };
 
-      // Sliding will not do it — try standing it the other way round. This is
-      // opt-out because turning a chair to get it out of a sideboard would leave
-      // it facing the wrong way, breaking a rule this pass exists to protect.
-      if (!allowRotate) continue;
-      for (const rot of [90, 180, 270]) {
-        if (!strictFit(grid, poly, items, byId, mf, mover.x, mover.y, rot, mover.uid)) continue;
-        mover.rot = rot;
-        if (!overlapsAny(mover, mf, items, byId)) break;
-      }
+      const otherF = other === a ? fa : fb;
+      if (tryMove(mover, other, mf, otherF)) continue;
+
+      tryMove(other, mover, otherF, mf);
     }
   }
+  return moved;
 }
 
 /** Does this piece still stand inside anything it should not? */

@@ -165,3 +165,26 @@ export function rectCells(g: Grid, x: number, y: number, w: number, d: number): 
   }
   return out;
 }
+
+/**
+ * The cells a rect covers, trimmed to the grid instead of refused by it.
+ *
+ * rectCells answers "null" when a rect pokes past the edge, which is right for
+ * asking whether a piece *fits* and wrong for asking what it is *near*: a
+ * wardrobe flush against a wall has a widened footprint half outside the grid,
+ * and taking null at face value drops the wardrobe from the check entirely —
+ * so the next piece is free to stand 4 cm from it. Anything that widens a
+ * footprint to ask about clearance wants this one.
+ */
+export function rectCellsClamped(g: Grid, x: number, y: number, w: number, d: number): number[] {
+  const i0 = Math.max(0, Math.floor((x - w / 2 - g.ox) / g.cell + 1e-9));
+  const i1 = Math.min(g.cols - 1, Math.floor((x + w / 2 - g.ox) / g.cell - 1e-9));
+  const j0 = Math.max(0, Math.floor((y - d / 2 - g.oy) / g.cell + 1e-9));
+  const j1 = Math.min(g.rows - 1, Math.floor((y + d / 2 - g.oy) / g.cell - 1e-9));
+  const out: number[] = [];
+  if (i0 > i1 || j0 > j1) return out;
+  for (let j = j0; j <= j1; j++) {
+    for (let i = i0; i <= i1; i++) out.push(i + j * g.cols);
+  }
+  return out;
+}

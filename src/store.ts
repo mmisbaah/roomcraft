@@ -42,8 +42,12 @@ import {
   CHAIR_LIMIT,
   CHAIR_LIMIT_EXEMPT,
   REPEAT_EXEMPT,
+  CATEGORY_LIMIT,
+  DECOR_LIMIT,
+  DECOR_TYPES,
   COVERAGE_FLOOR,
   DUPLICATE_FREE_AREA_MAX,
+  isLight,
   type EdgeInfo,
   type PresetStep,
 } from './logic/placement';
@@ -1262,6 +1266,13 @@ export const useStore = create<AppState>((set, get) => ({
       // lights (see the duplicate rule below): the library holds two recessed
       // fittings and a large room's lattice has a dozen points.
       for (let i = 0; i < lights; i++) steps.push({ type: 'ceilight', kind: 'recessed' });
+      // Rule 1 goes down first. The lattice picks its own points, but a lamp
+      // placed before the fittings gets to choose anywhere it likes and the
+      // lattice is then forced to work around it — in a small room every point
+      // can end up within 3 m of the one floor lamp, and the room is left with
+      // no ceiling light at all. Fittings first, then the lamps find whatever
+      // room is left; the pendant is moved onto its table later, in refineLayout.
+      steps.sort((a, b) => (a.type === 'ceilight' ? 0 : 1) - (b.type === 'ceilight' ? 0 : 1));
       const dupFree = roomArea <= DUPLICATE_FREE_AREA_MAX;
       // Rule 2 — chairs are capped outside the dining room.
       const chairCap = CHAIR_LIMIT_EXEMPT.includes(room.kind) ? Infinity : CHAIR_LIMIT;
@@ -1350,6 +1361,44 @@ export const useStore = create<AppState>((set, get) => ({
           // is refused whether or not it is a different design, and the
           // coverage top-up does not get to buy its way past a hard cap.
           if (isChair(p) && heldChairs() >= chairCap) return false;
+          // At most CATEGORY_LIMIT items of one category. Joinery and flat
+          // textiles are exempt: a kitchen is made of cabinets, and a rug is
+          // walked on rather than looked at.
+          //
+          // Chairs are exempt because rule 2 already governs them — it holds a
+          // living room to two and lets a dining room have four, and stacking a
+          // blanket two-on-top would break rule 4 outright. Above
+          // DUPLICATE_FREE_AREA_MAX the cap lifts with rule 3: a 120 m² office
+          // that may not hold a third desk cannot reach its floor, and crowding
+          // is the only thing this cap exists to prevent — a room that size has
+          // no crowding to prevent.
+          if (
+            !REPEAT_EXEMPT.has(p.kind) &&
+            !isFlat(p) &&
+            !isChair(p) &&
+            roomArea <= DUPLICATE_FREE_AREA_MAX
+          ) {
+            const heldOfType = inRoom.filter(
+              (it) => ITEM_INDEX.get(it.itemId)?.type === p.type,
+            ).length;
+            if (heldOfType >= CATEGORY_LIMIT) return false;
+          }
+          // At most DECOR_LIMIT decorative items. A rug is not decor, and
+          // paired decor is not counted either — one cushion on a sofa reads as
+          // an oversight, so the pair rule 3 already exempts is exempt here too,
+          // with the preset left in charge of how many there are.
+          if (
+            DECOR_TYPES.has(p.type) &&
+            !isFlat(p) &&
+            !REPEAT_EXEMPT.has(p.kind) &&
+            roomArea <= DUPLICATE_FREE_AREA_MAX
+          ) {
+            const heldDecor = inRoom.filter((it) => {
+              const of = ITEM_INDEX.get(it.itemId);
+              return of ? DECOR_TYPES.has(of.type) && !isFlat(of) : false;
+            }).length;
+            if (heldDecor >= DECOR_LIMIT) return false;
+          }
           // The coverage top-up waives the duplicate rule only where repeats are allowed
           // at all. In a duplicate-free room rule 3 still holds, because the two
           // failure modes are not equal: a hallway with two console tables is
@@ -1394,37 +1443,53 @@ export const useStore = create<AppState>((set, get) => ({
             ]
           : eligible[Math.floor(Math.random() * eligible.length)];
 
-        // Respect the room's quantity ceiling before trying to place. A rug or
-        // a flat runner is walkable and never makes a room feel tight, so it is
-        // exempt — the guideline is about furniture standing on the floor.
-        const onFloor = pick.mount === 'floor' && !isFlat(pick);
-        if (onFloor && (floorPieces >= pieceCap || floorArea + pick.w * pick.d > budget)) {
-          overBudget++;
-          return false;
-        }
-        // Place against everything already in the room *and* other rooms.
-        const spot = findBestSpot(st.grid, room.poly, items, ITEM_INDEX, pick, edges);
-        if (!spot) {
-          skipped++;
-          return false;
-        }
-        const it: PlacedItem = {
-          uid: nextUid(),
-          itemId: pick.id,
-          roomId: room.id,
-          x: spot.x,
-          y: spot.y,
-          rot: spot.rot,
-          colorIdx: 0,
+        // A light that lands too close to another light is retried against the rest
+        // of the pool rather than dropped. Rule 1 is a hard spacing, and the
+        // first candidate's spot is often fine — but when it is not, giving up
+        // on the fitting leaves the room under-lit for want of trying the next
+        // one.
+        const tryPlace = (pick: (typeof eligible)[number]): boolean => {
+          // Respect the room's quantity ceiling before trying to place. A rug or
+          // a flat runner is walkable and never makes a room feel tight, so it is
+          // exempt — the guideline is about furniture standing on the floor.
+          const onFloor = pick.mount === 'floor' && !isFlat(pick);
+          if (onFloor && (floorPieces >= pieceCap || floorArea + pick.w * pick.d > budget)) {
+            overBudget++;
+            return false;
+          }
+          // Place against everything already in the room *and* other rooms.
+          const spot = findBestSpot(st.grid, room.poly, items, ITEM_INDEX, pick, edges);
+          if (!spot) {
+            skipped++;
+            return false;
+          }
+          const it: PlacedItem = {
+            uid: nextUid(),
+            itemId: pick.id,
+            roomId: room.id,
+            x: spot.x,
+            y: spot.y,
+            rot: spot.rot,
+            colorIdx: 0,
+          };
+          inRoom.push(it);
+          items.push(it);
+          placed++;
+          if (onFloor) {
+            floorPieces++;
+            floorArea += pick.w * pick.d;
+          }
+          return true;
         };
-        inRoom.push(it);
-        items.push(it);
-        placed++;
-        if (onFloor) {
-          floorPieces++;
-          floorArea += pick.w * pick.d;
+
+        if (isLight(pick)) {
+          const order = [...eligible].sort(() => Math.random() - 0.5);
+          for (const candidate of order) {
+            if (tryPlace(candidate)) return true;
+          }
+          return false;
         }
-        return true;
+        return tryPlace(pick);
       };
 
       for (const step of steps) {

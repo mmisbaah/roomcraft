@@ -17,7 +17,7 @@ import {
   spaceChairs,
 } from './roomrules';
 import { clamp01, distPointSeg, pointInPoly, polyArea, polyCentroid, rotatedSize, segsCross } from './geometry';
-import { rectCells, type Grid } from './grid';
+import { rectCells, rectCellsClamped, type Grid } from './grid';
 import { CLEARANCE } from './rules';
 
 export interface EdgeInfo {
@@ -95,6 +95,61 @@ export function overlapsAllowed(a: FurnItem, b: FurnItem): boolean {
   if (isFlat(a) || isFlat(b)) return true;
   const t = new Set([a.type, b.type]);
   return t.has('tables') && t.has('seating');
+}
+
+/**
+ * The smallest gap, in metres, left between two floor pieces that have no
+ * reason to touch.
+ *
+ * A dresser 4 cm from a hall bench and a lamp 12 cm from a bookcase read as
+ * furniture that has been shoved into place rather than arranged: the eye
+ * counts the gap before it counts the pieces. 15 cm is enough to show two
+ * separate objects without opening a walkway between them.
+ */
+export const MIN_FLOOR_GAP = 0.15;
+
+/**
+ * Built-in runs — base and wall units, pantry and laundry joinery.
+ *
+ * A run of cabinets is one piece of woodwork rather than several objects at
+ * odds with each other: its units touch, and a 15 cm gap between two base units
+ * would look like a hole cut in the run.
+ */
+const RUN_KINDS = new Set([
+  'basecab',
+  'wallcab',
+  'pantrycab',
+  'pantryshelf',
+  'laundrycab',
+  'laundrywall',
+]);
+
+/**
+ * May these two floor pieces sit closer than MIN_FLOOR_GAP?
+ *
+ * Five pairings earn the exemption. A run of joinery is a single object; a
+ * chair is meant to be pushed into its table; the nightstand belongs against
+ * the bed, and a gap between them reads as a piece that has been moved away;
+ * a rug is walked on rather than looked at; and two chairs are rule 2's to
+ * separate, not the floor's.
+ */
+export function gapAllowed(a: FurnItem, b: FurnItem): boolean {
+  if (isFlat(a) || isFlat(b)) return true;
+  if (RUN_KINDS.has(a.kind) || RUN_KINDS.has(b.kind)) return true;
+  if (overlapsAllowed(a, b)) return true;
+  // A stool at an island or a chair at a vanity is pulled up to the worktop —
+  // the point is that it touches, and 15 cm of air would leave it stranded.
+  const t = new Set([a.type, b.type]);
+  if (t.has('seating') && (t.has('kitchen') || t.has('dining') || t.has('vanity'))) return true;
+  if (a.kind === 'nightstand' && b.type === 'beds') return true;
+  if (b.kind === 'nightstand' && a.type === 'beds') return true;
+  // Two chairs. The walking-space pass is what keeps a free chair clear of its
+  // neighbours, and the pair at a table sits a third of the table apart by
+  // design: four dining chairs on a 1.4 m table are 47 cm apart centre to
+  // centre, which is tighter than any floor gap could ever allow — refusing it
+  // left one of the rule 4 chairs stranded on the far wall.
+  if (isChair(a) && isChair(b)) return true;
+  return false;
 }
 
 const normDeg = (r: number) => ((r % 360) + 360) % 360;
@@ -310,7 +365,12 @@ export function canPlaceRaw(
     const os = rotatedSize(f.w, f.d, o.rot);
     const dx = Math.abs(x - o.x);
     const dy = Math.abs(y - o.y);
-    if (dx < (w + os.w) / 2 && dy < (d + os.d) / 2) return false;
+    // MIN_FLOOR_GAP widens both footprints by half, so two pieces that have no
+    // reason to touch are refused when they would end up closer than the gap —
+    // while joinery runs, tucked chairs and the bed's nightstand are free to
+    // sit flush.
+    const g = gapAllowed(item, f) ? 0 : MIN_FLOOR_GAP;
+    if (dx < (w + os.w) / 2 + g && dy < (d + os.d) / 2 + g) return false;
   }
   return true;
 }
@@ -439,11 +499,16 @@ function findWallSpot(
   edges: EdgeInfo[],
 ): Spot | null {
   const wantsWindow = !!item.spec.windowPref;
+  // Rule 1 — a sconce or picture light keeps its distance from every other
+  // light. Filtered per edge so the scan still returns the best wall that
+  // complies, rather than the best wall and then nothing.
+  const light = isLight(item);
   let best: Spot | null = null;
   let bestScore = -Infinity;
   for (let i = 0; i < edges.length; i++) {
     const spot = sampleEdge(poly, items, byId, item, edges, i);
     if (!spot) continue;
+    if (light && !lightSpacingClear(items, byId, spot.x, spot.y, item)) continue;
     const e = edges[i];
     const len = Math.hypot(e.b.x - e.a.x, e.b.y - e.a.y);
     let s = len * 0.1;
@@ -544,11 +609,22 @@ function findCeilingSpot(
       const of = byId.get(o.itemId)!;
       return Math.hypot(o.x - x, o.y - y) < ((of.w + item.w) / 2) * 0.8;
     });
+  // Rule 1 — this fitting keeps the spacing from *every* light already in the
+  // room, not just the ceiling ones. `occ` above only sees ceiling mounts, so a
+  // floor lamp standing under a lattice point would otherwise go unnoticed, and
+  // the downlight would take a point 2 m from it. Tested inside the search so a
+  // fitting denied its first choice takes a compliant one instead of being
+  // refused outright — that is the difference between a room with one light and
+  // a room with two.
+  const spaced = isLight(item)
+    ? (x: number, y: number) => lightSpacingClear(items, byId, x, y, item)
+    : () => true;
   const tryPt = (x: number, y: number): Spot | null => {
     const sx = Math.round(x / 0.25) * 0.25;
     const sy = Math.round(y / 0.25) * 0.25;
     if (!rotRectInsidePoly(poly, sx, sy, item.w, item.d, 0)) return null;
     if (!free(sx, sy)) return null;
+    if (!spaced(sx, sy)) return null;
     return { x: sx, y: sy, rot: 0 };
   };
   // Rule 1 — every ceiling light at least CEILING_LIGHT_SPACING from every other,
@@ -566,17 +642,12 @@ function findCeilingSpot(
   if (item.type === 'ceilight') {
     const lattice = ceilingLightGrid(poly);
     if (lattice.length) {
-      const clear = (x: number, y: number) =>
-        !occ.some((o) => {
-          const of = byId.get(o.itemId)!;
-          return Math.hypot(o.x - x, o.y - y) < (of.w + item.w) / 2 + 0.4;
-        });
       const anchor = item.kind === 'recessed' ? centroid : tables[0] ?? centroid;
       const ordered = [...lattice].sort(
         (a, b) => Math.hypot(a.x - anchor.x, a.y - anchor.y) - Math.hypot(b.x - anchor.x, b.y - anchor.y),
       );
       for (const g of ordered) {
-        if (!clear(g.x, g.y)) continue;
+        if (!spaced(g.x, g.y)) continue;
         if (!rotRectInsidePoly(poly, g.x, g.y, item.w, item.d, 0)) continue;
         return { x: g.x, y: g.y, rot: 0 };
       }
@@ -599,6 +670,7 @@ function findCeilingSpot(
       const y = grid.oy + (j + 0.5) * grid.cell;
       if (!rotRectInsidePoly(poly, x, y, item.w, item.d, 0)) continue;
       if (!free(x, y)) continue;
+      if (!spaced(x, y)) continue;
       const dd = Math.hypot(x - centroid.x, y - centroid.y);
       if (dd < bestD) {
         bestD = dd;
@@ -667,6 +739,9 @@ function findSurfaceSpot(
         }
       }
       if (clash) continue;
+      // Rule 1 — a table lamp's spot must keep the spacing too; a lamp on the
+      // nightstand directly beneath a ceiling fitting is the same breach.
+      if (isLight(item) && !lightSpacingClear(items, byId, wx, wy, item)) continue;
       const s =
         (SURFACE_PRIO[f.type] ?? 1) + (k === used && used === 0 ? 0.4 : 0) + Math.random() * 0.1;
       if (s > bestScore) {
@@ -692,8 +767,32 @@ function findFloorSpot(
   const prefs = PREFS[item.type];
   const ctx = buildScoreCtx(poly, edges);
   const occ = occupiedCells(grid, items, byId);
+  // MIN_FLOOR_GAP, applied as the same widening: cells within the gap of a
+  // piece that must keep its distance are treated as taken, so the scan lands
+  // on a position with air around it rather than butting up against the sofa.
+  const occGap = new Set<number>();
+  if (!isFlat(item)) {
+    for (const o of items) {
+      const f = byId.get(o.itemId);
+      if (!f || !blocksFloor(f) || isFlat(f) || gapAllowed(item, f)) continue;
+      const sz = rotatedSize(f.w, f.d, o.rot);
+      // Clamped, not plain rectCells: a piece flush against a wall is the one
+      // case where the widened footprint leaves the grid, and dropping it there
+      // would leave precisely the wall-adjacent furniture unchecked.
+      for (const c of rectCellsClamped(
+        grid,
+        o.x,
+        o.y,
+        sz.w + 2 * MIN_FLOOR_GAP,
+        sz.d + 2 * MIN_FLOOR_GAP,
+      )) {
+        occGap.add(c);
+      }
+    }
+  }
   const rotations = opts?.rotations ?? [0, 90];
   const flat = isFlat(item);
+  const light = isLight(item);
   let best: Spot | null = null;
   let bestScore = -Infinity;
 
@@ -721,7 +820,7 @@ function findFloorSpot(
         if (!flat) {
           for (let j = j0; j < j0 + m && ok; j++) {
             for (let i = i0; i < i0 + n; i++) {
-              if (occ.has(i + j * grid.cols)) {
+              if (occ.has(i + j * grid.cols) || occGap.has(i + j * grid.cols)) {
                 ok = false;
                 break;
               }
@@ -729,6 +828,12 @@ function findFloorSpot(
           }
           if (!ok) continue;
         }
+        // Rule 1 — a floor or table lamp takes a position that keeps the
+        // spacing from every other light. Excluding positions here rather than
+        // rejecting the winner afterwards is what lets a lamp take the far
+        // corner: its preferred spot is beside the sofa, 2 m from the ceiling
+        // fitting, and refusing only that spot used to lose the lamp entirely.
+        if (light && !lightSpacingClear(items, byId, x, y, item)) continue;
         let s = scoreAt(ctx, poly, x, y, prefs);
         if (rot !== 0) s -= 0.03; // slight preference for native orientation
         // R36/R49/R147 — beds and tall pieces keep clear of window walls.
@@ -754,11 +859,66 @@ function findFloorSpot(
 }
 
 /**
+ * Is this item a light, of any kind — ceiling, wall, floor or table?
+ *
+ * Rule 1 applies to all of them, not just the ceiling: a floor lamp 23 cm from
+ * a ceiling fitting is the same breach as two downlights 23 cm apart, and the
+ * rule is about how the room is lit rather than about which mount the fitting
+ * hangs from.
+ */
+export function isLight(f: FurnItem): boolean {
+  return f.type === 'ceilight' || f.type === 'walllight' || f.type === 'floorlamp';
+}
+
+/**
+ * Would a light at this position keep the rule's distance from every light
+ * already in the room?
+ *
+ * Centre to centre, which is what the rule is about: two fittings 3 m apart
+ * centre to centre are 3 m apart, whatever their diameters.
+ */
+export function lightSpacingClear(
+  items: PlacedItem[],
+  byId: Map<string, FurnItem>,
+  x: number,
+  y: number,
+  item: FurnItem,
+  excludeUid?: string,
+): boolean {
+  return items.every((o) => {
+    if (o.uid === excludeUid) return true;
+    const of = byId.get(o.itemId);
+    if (!of || !isLight(of)) return true;
+    return Math.hypot(o.x - x, o.y - y) >= CEILING_LIGHT_SPACING - 1e-9;
+  });
+}
+
+/**
  * Find the best spot for an item — dispatches on its mount type.
  * `edges` are the room's polygon edges with their kind (wall/window/door).
  * Returns null when nothing fits.
  */
 export function findBestSpot(
+  grid: Grid,
+  poly: Vec2[],
+  items: PlacedItem[],
+  byId: Map<string, FurnItem>,
+  item: FurnItem,
+  edges: EdgeInfo[],
+  opts?: { rotations?: number[] },
+): Spot | null {
+  const spot = findBestSpotInner(grid, poly, items, byId, item, edges, opts);
+  // Rule 1 — a light must keep the spacing from every light already placed.
+  // Checked here rather than inside each spot-finder so it applies to every
+  // mount: a wall sconce and a floor lamp are bound by the same rule as a
+  // downlight, and the ceiling lattice alone does not see them.
+  if (spot && isLight(item) && !lightSpacingClear(items, byId, spot.x, spot.y, item)) {
+    return null;
+  }
+  return spot;
+}
+
+function findBestSpotInner(
   grid: Grid,
   poly: Vec2[],
   items: PlacedItem[],
@@ -892,10 +1052,15 @@ function cellsFree(grid: Grid, poly: Vec2[], item: FurnItem, x: number, y: numbe
 }
 
 /**
- * cellsFree plus an exact rect-overlap check against every other blocking
- * item. Unlike canPlace's cell-based occupancy this allows two pieces to
- * share a grid cell when their footprints don't actually touch — required
- * for the 5–15 cm nightstand gap and chair nudges.
+ * cellsFree plus an exact footprint check against every other blocking item —
+ * at MIN_FLOOR_GAP when the pair owes each other one. Unlike canPlace's
+ * cell-based occupancy this allows two pieces to share a grid cell when their
+ * footprints don't actually touch, which is what keeps the nightstand's 5–15 cm
+ * and the chair nudges possible; but a correction that only ever asked about
+ * intersection could settle a dispute with one neighbour by parking the piece
+ * against a second, which is how a pass meant to separate furniture ended up
+ * leaving it touching. Every move is therefore held to the same spacing the
+ * original placement was.
  */
 export function strictFit(
   grid: Grid,
@@ -910,6 +1075,10 @@ export function strictFit(
   opts?: { skipOverlap?: boolean },
 ): boolean {
   if (!cellsFree(grid, poly, item, x, y, rot)) return false;
+  // Rule 1 applies to a move exactly as it did to the original placement: a
+  // corrective slide that opened a 15 cm gap by walking a floor lamp from 3 m
+  // to 2.95 m from the ceiling fitting would be trading one breach for another.
+  if (isLight(item) && !lightSpacingClear(items, byId, x, y, item, excludeUid)) return false;
   if (opts?.skipOverlap) return true;
   const { w, d } = rotatedSize(item.w, item.d, rot);
   for (const o of items) {
@@ -917,7 +1086,13 @@ export function strictFit(
     const f = byId.get(o.itemId);
     if (!f || !blocksFloor(f)) continue;
     const os = rotatedSize(f.w, f.d, o.rot);
-    if (rectsOverlap(x, y, w, d, o.x, o.y, os.w, os.d)) return false;
+    const g = gapAllowed(item, f) ? 0 : MIN_FLOOR_GAP;
+    if (
+      Math.abs(x - o.x) < (w + os.w) / 2 + g - 0.02 &&
+      Math.abs(y - o.y) < (d + os.d) / 2 + g - 0.02
+    ) {
+      return false;
+    }
   }
   return true;
 }
@@ -1510,6 +1685,13 @@ function centerPendantOverTable(poly: Vec2[], items: PlacedItem[], byId: Map<str
     return Math.hypot(o.x - sx, o.y - sy) < ((of.w + pf.w) / 2) * 0.8;
   });
   if (clash) return;
+  // Rule 1 still binds while it moves. The pendant starts on the lattice point
+  // nearest the centroid — the table has not been placed yet — and by the time
+  // this runs the lamps have placed themselves 3 m from *that* position. Moving
+  // it over the table blind would put it half that from the floor lamp beside
+  // the sofa, so the move only happens when the spacing survives it; staying
+  // off-centre is the lesser fault.
+  if (!lightSpacingClear(items, byId, sx, sy, pf, pendant.uid)) return;
   pendant.x = sx;
   pendant.y = sy;
 }
@@ -1724,7 +1906,11 @@ const FLOOR_PIECE_LIMIT_BY_KIND: Partial<Record<RoomKind, number>> = {
   sunroom: 10,
   pantry: 9,
   kids: 9,
-  entryway: 9,
+  // Every piece a hall calls for is small — coat rack, umbrella stand, baskets,
+  // ottomans, consoles tenth of a square metre each — so nine of them cannot
+  // even touch the coverage floor in a room of any real size, and a large
+  // entryway stalled at ~8.5%.
+  entryway: 12,
 };
 
 /** Floor-coverage allowance for a room of this size. */
@@ -1826,6 +2012,19 @@ export function ceilingLightsFor(poly: Vec2[]): number {
 export const DUPLICATE_FREE_AREA_MAX = 40;
 
 /**
+ * Kinds that are a chair someone sits on — not a stool, bench or ottoman.
+ *
+ * This lives here rather than in the rules module because placement needs it
+ * too: the chairs rule 2 counts are the same chairs the floor gap has to make
+ * room for, and two definitions of "chair" are two chances to disagree.
+ */
+const CHAIR_KINDS = new Set(['dining', 'accent', 'armchair', 'office', 'desk']);
+
+export function isChair(f: FurnItem): boolean {
+  return f.type === 'seating' && CHAIR_KINDS.has(f.kind);
+}
+
+/**
  * Rule 2 — at most this many chairs, in any room but a dining room.
  *
  * A dining room is exempt because rule 4 puts four chairs around the table, and
@@ -1862,6 +2061,34 @@ export const REPEAT_EXEMPT = new Set([
   'pillow',
   'sconce',
 ]);
+
+/**
+ * At most this many items of one category in a room.
+ *
+ * "Category" is the furniture type — seating, tables, storage, textiles. The
+ * one-of-each-kind rule already forbids two of the same kind, but a living room
+ * could still take a coffee table, two side tables and a console, which is four
+ * tables and reads as cluttered however different they are. Two per category is
+ * what a furnished room actually holds.
+ *
+ * Built-in joinery is exempt, because a kitchen is made of cabinets and capping
+ * it at two would leave out the sink. Flat textiles are exempt because a rug is
+ * walked on rather than looked at.
+ */
+export const CATEGORY_LIMIT = 2;
+
+/** Categories that are there to look at rather than to be used. */
+export const DECOR_TYPES = new Set(['walldecor', 'textiles', 'plant', 'tabletop']);
+
+/**
+ * At most this many decorative items in a room.
+ *
+ * Decor is the fastest way to make a room feel crowded, because each piece is
+ * small and the eye counts them: a bedroom with four prints, six cushions, a
+ * throw and three plants has ten things to look at and nowhere to rest. Four is
+ * enough to finish a room; past that it is noise.
+ */
+export const DECOR_LIMIT = 4;
 
 /**
  * Floor-piece allowance for a room of this kind and size.
