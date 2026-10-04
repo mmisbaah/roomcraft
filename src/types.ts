@@ -37,7 +37,17 @@ export type FurnType =
   | 'shower'
   | 'toilet'
   | 'towelrack'
-  | 'vamirror';
+  | 'vamirror'
+  // Added so the room rules can be followed literally: these cover the objects
+  // the rules name that nothing else in the library held (cribs, treadmills,
+  // washers, filing cabinets, can organizers, porch swings, valet stands).
+  | 'nursery'
+  | 'gym'
+  | 'laundry'
+  | 'office'
+  | 'pantry'
+  | 'outdoor'
+  | 'closet';
 
 export type EdgeKind = 'wall' | 'window' | 'door';
 
@@ -177,6 +187,13 @@ export const TYPE_LABEL: Record<FurnType, string> = {
   toilet: 'Toilets',
   towelrack: 'Towel Racks',
   vamirror: 'Vanity Mirrors',
+  nursery: 'Nursery & Kids',
+  gym: 'Home Gym',
+  laundry: 'Laundry & Utility',
+  office: 'Office & Study',
+  pantry: 'Pantry & Kitchen',
+  outdoor: 'Outdoor & Sunroom',
+  closet: 'Closet & Dressing',
 };
 
 export const TYPE_ICON: Record<FurnType, string> = {
@@ -205,6 +222,13 @@ export const TYPE_ICON: Record<FurnType, string> = {
   toilet: '\u{1F6BD}',
   towelrack: '\u{1F9FB}',
   vamirror: '\u{1FA9E}',
+  nursery: '\u{1F37C}',
+  gym: '\u{1F3CB}',
+  laundry: '\u{1F9FA}',
+  office: '\u{1F4BC}',
+  pantry: '\u{1F96D}',
+  outdoor: '\u{1F332}',
+  closet: '\u{1F455}',
 };
 
 export const TYPE_ORDER: FurnType[] = [
@@ -233,6 +257,13 @@ export const TYPE_ORDER: FurnType[] = [
   'toilet',
   'towelrack',
   'vamirror',
+  'nursery',
+  'gym',
+  'laundry',
+  'office',
+  'pantry',
+  'outdoor',
+  'closet',
 ];
 
 export const MOUNT_LABEL: Record<Mount, string> = {

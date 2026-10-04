@@ -60,6 +60,17 @@ export const PREFS: Record<FurnType, PlacePrefs> = {
   toilet: { wall: 1.0, center: -0.1, door: -1.6 },
   towelrack: { wall: 1.0, center: 0.3, door: -0.4 },
   vamirror: { wall: 1.0, center: 0.4, door: -0.6 },
+  // The rule-driven categories. They behave like casegoods (hug the wall) with
+  // the usual exceptions: kit you stand in the middle of — gym machines, a
+  // laundry trolley, a closet island — is deliberately allowed toward the centre
+  // so it does not end up jammed against a skirting board.
+  nursery: { wall: 0.95, center: 0.3, door: -1.0 },
+  gym: { wall: 0.7, center: 0.8, door: -1.6 },
+  laundry: { wall: 1.15, center: 0.1, door: -1.5 },
+  office: { wall: 1.0, center: 0.25, door: -1.3 },
+  pantry: { wall: 1.1, center: 0.2, door: -1.2 },
+  outdoor: { wall: 0.8, center: 0.5, door: -0.9 },
+  closet: { wall: 1.05, center: 0.15, door: -1.2 },
 };
 
 /** Flat textiles (rugs, runners) — they don't block anything. */
@@ -129,7 +140,21 @@ export function supportTop(f: FurnItem): number | null {
   }
   if (f.type === 'beds') return 0.52;
   if (f.type === 'seating') return (f.spec.seatH ?? 0.45) + 0.14;
+  // A worktop-height piece in the rule-driven categories is still a worktop:
+  // the folding counter, the pantry cart and the closet island all have to be
+  // able to carry a jar or a lamp. Kept to counter height so a tall shelf unit
+  // or a gym rack never becomes a surface something is stood on.
+  if (f.type === 'laundry' || f.type === 'pantry' || f.type === 'closet') {
+    const h = f.h || 0;
+    return h > 0.2 && h <= 1.0 ? h : null;
+  }
+  if (f.type === 'office') return isOfficeWorktop(f) ? f.h || 0.75 : null;
   return null;
+}
+
+/** Office desks and their converters are worktops; filing cabinets are not. */
+function isOfficeWorktop(f: FurnItem): boolean {
+  return f.kind === 'desk' || f.kind === 'standing';
 }
 
 /** Highest support top under (x, y), or null when the point isn't on a support. */
@@ -1604,6 +1629,14 @@ export interface PresetStep {
  * is the cheapest way to make a layout read as a room rather than a floorplan —
  * so it is added unconditionally rather than trusting each list to include one.
  *
+ * Each list below follows that room's written specification object for object,
+ * including the pieces that needed library categories of their own (a nursery's
+ * crib and mobile, a gym's treadmill and squat rack, a laundry's washer and
+ * drying rack, an office's filing cabinet and footrest, a pantry's can
+ * organizers, a sunroom's porch swing, a closet's valet stand). Where a rule
+ * names something and the library now holds it, the rule wins — a nursery gets
+ * a crib rather than whichever bed the category falls back to.
+ *
  * \`kind\` narrows the pool only when the library actually has that kind, so a
  * step naming a kind the current tier can't reach falls back to the rest of the
  * category instead of placing nothing. ROOM_QUANTITY in store.ts then caps how
@@ -1667,14 +1700,15 @@ export const PRESETS: Record<RoomKind, PresetStep[]> = {
     { type: 'seating', kind: 'stool', count: 2 }, // bar stools
     { type: 'kitchen', kind: 'hood' }, // over the hob
     // Design objects.
+    { type: 'pantry', kind: 'backsplash' }, // backsplash tiles
     { type: 'ceilight', kind: 'pendant', count: 2 }, // over the island
     { type: 'archlight', kind: 'undercab', count: 2 }, // under-cabinet lighting
-    { type: 'archlight', kind: 'cove' }, // backsplash wash
+    { type: 'pantry', kind: 'crock' }, // utensil crock
+    { type: 'pantry', kind: 'board' }, // cutting board
+    { type: 'kitchen', kind: 'wallcab' }, // open shelving decor
     { type: 'tabletop', kind: 'bowl' }, // fruit bowl
-    { type: 'tabletop', kind: 'box' }, // utensil crock / cutting board
-    { type: 'kitchen', kind: 'wallcab' }, // open shelving
-    { type: 'walldecor', kind: 'clock' },
     { type: 'textiles', kind: 'runner' }, // small rug
+    { type: 'walldecor', kind: 'clock' }, // wall clock
     { type: 'tableplants', kind: 'evergreen' },
     { type: 'functional', kind: 'basket' },
   ],
@@ -1693,17 +1727,19 @@ export const PRESETS: Record<RoomKind, PresetStep[]> = {
     { type: 'walllight', kind: 'sconce', count: 2 },
     { type: 'walldecor', kind: 'artwork' }, // above the headboard
     { type: 'walldecor', kind: 'mirror' },
-    { type: 'textiles', kind: 'pillow', count: 2 }, // bedding
+    { type: 'textiles', kind: 'pillow', count: 2 }, // duvet and pillows
     { type: 'textiles', kind: 'throw' },
     { type: 'textiles', kind: 'curtain' }, // blackout curtains
     { type: 'tabletop', kind: 'box' }, // jewellery box
+    { type: 'walldecor', kind: 'clock' }, // alarm clock
     { type: 'tableplants', kind: 'polka' },
     { type: 'walldecor', kind: 'canvas' },
-    { type: 'walldecor', kind: 'clock' }, // alarm clock
   ],
   kids: [
-    // Furniture.
+    // Furniture — a bunk bed when there is room for one, which is what the
+    // rule asks for ahead of everything else.
     { type: 'beds' },
+    { type: 'nursery', kind: 'bunk' },
     { type: 'textiles', kind: 'arearug' }, // play rug
     { type: 'tables', kind: 'desk' },
     { type: 'seating', kind: 'dining' }, // desk chair
@@ -1712,54 +1748,60 @@ export const PRESETS: Record<RoomKind, PresetStep[]> = {
     { type: 'seating', kind: 'pouf' }, // bean bag chair
     { type: 'storage', kind: 'dresser' },
     // Design objects.
-    { type: 'walllight', kind: 'vanity' }, // nightlight
+    { type: 'nursery', kind: 'nightlight' }, // nightlight
+    { type: 'nursery', kind: 'glowstar' }, // glow-in-the-dark stars
     { type: 'walldecor', kind: 'artwork', count: 2 }, // colourful wall art
     { type: 'walldecor', kind: 'canvas' }, // posters
-    { type: 'hangingplants', kind: 'ivy' }, // hanging canopy / decor
+    { type: 'nursery', kind: 'canopy' }, // hanging canopy
     { type: 'textiles', kind: 'pillow', count: 2 }, // playful bedding
     { type: 'textiles', kind: 'throw' },
     { type: 'functional', kind: 'basket', count: 2 }, // toy organisers
+    { type: 'nursery', kind: 'toybin' },
     { type: 'floorplants', kind: 'zz' },
   ],
   nursery: [
-    // Furniture — crib first, since the mobile hangs over it.
-    { type: 'beds' },
+    // Furniture — the crib first, because the mobile hangs over it.
+    { type: 'nursery', kind: 'crib' },
+    { type: 'nursery', kind: 'mobile' }, // mobile above the crib
+    { type: 'nursery', kind: 'changing' }, // changing table
+    { type: 'nursery', kind: 'bassinet' },
+    { type: 'nursery', kind: 'glider' }, // glider / rocking chair
+    { type: 'nursery', kind: 'pail' }, // diaper pail
     { type: 'storage', kind: 'dresser' },
-    { type: 'storage', kind: 'chest' }, // changing table
-    { type: 'seating', kind: 'recliner' }, // glider / rocking chair
-    { type: 'seating', kind: 'accent' }, // bassinet-side chair
-    { type: 'storage', kind: 'cabinet' }, // diaper pail / storage
     { type: 'storage', kind: 'bookcase' },
     // Design objects.
-    { type: 'hangingplants', kind: 'pearls' }, // mobile over the crib
+    { type: 'nursery', kind: 'toybasket' }, // soft toy basket
     { type: 'textiles', kind: 'arearug' }, // soft rug
     { type: 'textiles', kind: 'curtain' }, // blackout curtains
-    { type: 'walllight', kind: 'vanity' }, // nightlight
-    { type: 'tabletop', kind: 'diffuser' }, // sound machine
-    { type: 'walldecor', kind: 'canvas', count: 2 }, // wall decals / prints
-    { type: 'functional', kind: 'basket' }, // soft toy basket
-    { type: 'tabletop', kind: 'box' }, // baby monitor
-    { type: 'walldecor', kind: 'canvas' }, // framed prints
+    { type: 'nursery', kind: 'nightlight' },
+    { type: 'nursery', kind: 'soundmachine' }, // sound machine
+    { type: 'nursery', kind: 'monitor' }, // baby monitor
+    { type: 'walldecor', kind: 'canvas', count: 2 }, // wall decals
+    { type: 'nursery', kind: 'bunting' },
     { type: 'tableplants', kind: 'calathea' },
   ],
   office: [
-    // Furniture.
+    // Furniture — the desk and its chair anchor the room.
     { type: 'textiles', kind: 'arearug' },
-    { type: 'tables', kind: 'desk' },
-    { type: 'seating', kind: 'dining' }, // ergonomic chair
-    { type: 'storage', kind: 'cabinet' }, // filing cabinet
+    { type: 'office', kind: 'desk' },
+    { type: 'office', kind: 'taskchair' }, // ergonomic office chair
+    { type: 'office', kind: 'standing' }, // standing desk converter
+    { type: 'office', kind: 'filing' }, // filing cabinet
     { type: 'storage', kind: 'bookcase' },
     { type: 'seating', kind: 'accent' }, // guest chair
-    { type: 'tabletop', kind: 'box' }, // standing desk converter
     // Design objects.
+    { type: 'office', kind: 'monitor' },
+    { type: 'office', kind: 'keyboard' },
+    { type: 'office', kind: 'mouse' },
+    { type: 'office', kind: 'cabletray' }, // cable management
+    { type: 'office', kind: 'footrest' },
+    { type: 'office', kind: 'organiser' }, // desk organiser
+    { type: 'office', kind: 'wastebasket' },
+    { type: 'office', kind: 'tissue' },
     { type: 'floorlamp', kind: 'desk' }, // task lamp
-    { type: 'storage', kind: 'media' }, // monitor
-    { type: 'tabletop', kind: 'tray' }, // keyboard / desk organiser
-    { type: 'functional', kind: 'basket' }, // wastebasket
+    { type: 'office', kind: 'pinboard' }, // wall calendar
     { type: 'walldecor', kind: 'artwork' }, // motivational art
-    { type: 'walldecor', kind: 'clock' }, // wall calendar
     { type: 'tableplants', kind: 'evergreen' }, // desk plant
-    { type: 'tabletop', kind: 'books' },
     { type: 'walllight', kind: 'sconce' },
   ],
   study: [
@@ -1769,19 +1811,21 @@ export const PRESETS: Record<RoomKind, PresetStep[]> = {
     { type: 'seating', kind: 'accent' }, // reading chair
     { type: 'storage', kind: 'bookcase', count: 2 }, // tall bookshelves
     { type: 'storage', kind: 'credenza' },
-    { type: 'storage', kind: 'cabinet' }, // filing cabinet
+    { type: 'office', kind: 'filing' }, // filing cabinet
     // Design objects.
     { type: 'floorlamp', kind: 'desk' }, // desk lamp
-    { type: 'tabletop', kind: 'sculpture' }, // globe
+    { type: 'office', kind: 'globe' },
     { type: 'walldecor', kind: 'canvas', count: 2 }, // framed maps
     { type: 'walllight', kind: 'sconce', count: 2 },
     { type: 'tabletop', kind: 'bookends' },
+    { type: 'tabletop', kind: 'books' }, // writing accessories
     { type: 'tabletop', kind: 'candle' }, // scented candle
     { type: 'walldecor', kind: 'tapestry' },
   ],
   library: [
-    // Furniture.
+    // Furniture — floor-to-ceiling shelving is the point of the room.
     { type: 'storage', kind: 'bookcase', count: 3 },
+    { type: 'office', kind: 'rollingladder' }, // rolling ladder
     { type: 'seating', kind: 'accent', count: 2 }, // tufted reading chairs
     { type: 'seating', kind: 'chaise' }, // chaise lounge
     { type: 'tables', kind: 'side', count: 2 },
@@ -1793,7 +1837,8 @@ export const PRESETS: Record<RoomKind, PresetStep[]> = {
     { type: 'tabletop', kind: 'bookends' },
     { type: 'tabletop', kind: 'books' },
     { type: 'walldecor', kind: 'canvas', count: 2 }, // framed portraits
-    { type: 'walldecor', kind: 'sculpture' }, // busts
+    { type: 'office', kind: 'bust' }, // busts
+    { type: 'office', kind: 'glassesstand' }, // reading glasses stand
     { type: 'textiles', kind: 'throw' }, // cozy blankets
     { type: 'tableplants', kind: 'evergreen' },
     { type: 'ceilight', kind: 'chandelier' },
@@ -1805,15 +1850,18 @@ export const PRESETS: Record<RoomKind, PresetStep[]> = {
     { type: 'beds' },
     { type: 'storage', kind: 'nightstand' },
     { type: 'storage', kind: 'dresser' },
+    { type: 'closet', kind: 'luggage' }, // luggage rack
     { type: 'seating', kind: 'daybed' }, // fold-out sofa
-    { type: 'tables', kind: 'desk' }, // small desk / vanity
+    { type: 'tables', kind: 'desk' }, // small desk or vanity
     // Design objects.
     { type: 'floorlamp', kind: 'table' }, // bedside lamp
     { type: 'walldecor', kind: 'mirror' },
     { type: 'textiles', kind: 'pillow', count: 2 }, // neutral bedding
     { type: 'towelrack' }, // fresh towels
     { type: 'tabletop', kind: 'tray' }, // welcome tray
-    { type: 'tabletop', kind: 'bowl' }, // snacks
+    { type: 'tabletop', kind: 'bowl' }, // water and snacks
+    { type: 'office', kind: 'tissue' },
+    { type: 'closet', kind: 'hanger' }, // closet hangers
     { type: 'walldecor', kind: 'artwork' },
     { type: 'floorplants', kind: 'snake' },
   ],
@@ -1840,21 +1888,25 @@ export const PRESETS: Record<RoomKind, PresetStep[]> = {
   ],
   laundry: [
     // Furniture — the appliance run along one wall.
-    { type: 'kitchen', kind: 'basecab', count: 3 },
-    { type: 'kitchen', kind: 'sinkbase' }, // utility sink
-    { type: 'kitchen', kind: 'wallcab', count: 2 }, // base / wall cabinets
-    { type: 'storage', kind: 'shelving' }, // hanging rod shelving
-    { type: 'functional', kind: 'laundry', count: 2 }, // sorting hampers
-    { type: 'kitchen', kind: 'cart' }, // folding counter / drying rack
+    { type: 'laundry', kind: 'washer' },
+    { type: 'laundry', kind: 'dryer' },
+    { type: 'laundry', kind: 'foldcounter' }, // folding counter
+    { type: 'laundry', kind: 'utilsink' }, // utility sink
+    { type: 'laundry', kind: 'laundrycab', count: 2 }, // base cabinets
+    { type: 'laundry', kind: 'rod' }, // hanging rod
+    { type: 'laundry', kind: 'hamper', count: 2 }, // sorting hampers
     // Design objects.
-    { type: 'archlight', kind: 'undercab', count: 2 },
-    { type: 'tabletop', kind: 'box', count: 2 }, // detergent jars
-    { type: 'tabletop', kind: 'bowl' },
-    { type: 'towelrack' }, // wall hooks
-    { type: 'textiles', kind: 'runner' }, // patterned floor tile / rug
-    { type: 'seating', kind: 'bench' }, // ironing board
+    { type: 'laundry', kind: 'dryingrack' },
+    { type: 'laundry', kind: 'ironingboard' },
+    { type: 'laundry', kind: 'iron', count: 2 },
+    { type: 'laundry', kind: 'clothespin' }, // clothespins
+    { type: 'laundry', kind: 'detergent', count: 2 }, // detergent jars
+    { type: 'laundry', kind: 'hookrail' }, // wall hooks
+    { type: 'laundry', kind: 'laundrymat' }, // patterned floor rug
+    { type: 'laundry', kind: 'utilityshelf' },
+    { type: 'archlight', kind: 'undercab', count: 2 }, // under-cabinet lighting
     { type: 'walldecor', kind: 'artwork' },
-    { type: 'walldecor', kind: 'clock' }, // wall clock
+    { type: 'walldecor', kind: 'clock' },
     { type: 'tableplants', kind: 'evergreen' },
   ],
   entryway: [
@@ -1892,76 +1944,96 @@ export const PRESETS: Record<RoomKind, PresetStep[]> = {
     { type: 'functional', kind: 'basket' },
   ],
   gym: [
-    // Furniture — the equipment, which is what a gym is. The library has no
-    // treadmill or squat rack, so the mass comes from casegoods and benches.
+    // Furniture — the equipment is what a gym is.
     { type: 'textiles', kind: 'arearug' }, // rubber gym flooring
-    { type: 'storage', kind: 'media', count: 2 }, // equipment mass (treadmill / bike)
-    { type: 'seating', kind: 'bench' }, // weight bench
-    { type: 'storage', kind: 'shelving', count: 2 }, // storage racks
-    { type: 'storage', kind: 'cabinet' }, // dumbbell / weight store
-    { type: 'textiles', kind: 'roundrug' }, // exercise mat
-    { type: 'seating', kind: 'stool' }, // step / plyo box
+    { type: 'gym', kind: 'treadmill' },
+    { type: 'gym', kind: 'bike' }, // stationary bike
+    { type: 'gym', kind: 'squatrack' },
+    { type: 'gym', kind: 'weightbench' },
+    { type: 'gym', kind: 'dumbbellrack' }, // storage racks for weights
+    { type: 'gym', kind: 'platetree' },
+    { type: 'gym', kind: 'kettlebell' },
+    { type: 'gym', kind: 'yogamat' },
+    { type: 'gym', kind: 'rower' },
+    { type: 'gym', kind: 'punchingbag' },
+    { type: 'gym', kind: 'step' },
+    { type: 'gym', kind: 'medball' },
     // Design objects.
     { type: 'walldecor', kind: 'mirror' }, // large wall mirror
     { type: 'walldecor', kind: 'artwork', count: 2 }, // motivational posters
+    { type: 'ceilight', kind: 'fan' }, // wall-mounted fan
+    { type: 'gym', kind: 'bottlestation' }, // water bottle station
+    { type: 'gym', kind: 'soundsystem' },
     { type: 'archlight', kind: 'ledstrip', count: 2 }, // LED strip lighting
-    { type: 'walllight', kind: 'sconce' },
+    { type: 'gym', kind: 'jumprope' },
+    { type: 'gym', kind: 'bands' },
     { type: 'towelrack' }, // towel hooks
-    { type: 'tabletop', kind: 'box' }, // water bottle station
     { type: 'tableplants', kind: 'evergreen' },
   ],
   sunroom: [
     // Furniture.
-    { type: 'textiles', kind: 'arearug' }, // indoor/outdoor rug
-    { type: 'seating', kind: 'loveseat' }, // wicker sofa
-    { type: 'seating', kind: 'accent', count: 2 }, // lounge chairs
+    { type: 'outdoor', kind: 'rattansofa' }, // wicker sofa
+    { type: 'outdoor', kind: 'rattanchair', count: 2 }, // lounge chairs
     { type: 'tables', kind: 'coffee' },
-    { type: 'dining', kind: 'round' }, // small dining set
-    { type: 'seating', kind: 'chaise' }, // lounge / porch chair
+    { type: 'outdoor', kind: 'bistro' }, // dining set
+    { type: 'outdoor', kind: 'porchswing' },
+    { type: 'outdoor', kind: 'wickertable' },
     // Design objects.
+    { type: 'outdoor', kind: 'outdoorrug' }, // indoor/outdoor rug
     { type: 'floorplants', kind: 'palm', count: 2 }, // potted plants
     { type: 'floorplants', kind: 'dracaena' },
+    { type: 'outdoor', kind: 'planter' },
     { type: 'ceilight', kind: 'fan' }, // ceiling fan
     { type: 'textiles', kind: 'curtain' }, // sheer curtains
     { type: 'textiles', kind: 'pillow', count: 2 }, // weather-resistant pillows
+    { type: 'outdoor', kind: 'chimes' }, // wind chimes
+    { type: 'outdoor', kind: 'lantern', count: 2 },
+    { type: 'outdoor', kind: 'feeder' }, // bird feeder
     { type: 'tabletop', kind: 'vase' },
-    { type: 'hangingplants', kind: 'ivy' },
     { type: 'walllight', kind: 'sconce' },
   ],
   pantry: [
     // Furniture — storage is the whole point of a pantry.
-    { type: 'storage', kind: 'shelving', count: 2 }, // adjustable shelving
-    { type: 'storage', kind: 'cabinet', count: 2 }, // freestanding cabinets
-    { type: 'kitchen', kind: 'cart', count: 2 }, // rolling carts
-    { type: 'dining', kind: 'winerack' },
-    { type: 'seating', kind: 'stool' }, // step stool
+    { type: 'pantry', kind: 'pantryshelf', count: 2 }, // adjustable shelving
+    { type: 'pantry', kind: 'pantrycab' }, // freestanding cabinets
+    { type: 'pantry', kind: 'pantrycart', count: 2 }, // rolling carts
+    { type: 'pantry', kind: 'pantrywine' }, // wine rack
+    { type: 'pantry', kind: 'stepstool' },
     // Design objects.
+    { type: 'pantry', kind: 'clearbin', count: 3 }, // clear storage bins
     { type: 'functional', kind: 'basket', count: 2 },
-    { type: 'tabletop', kind: 'box', count: 3 }, // clear storage bins
-    { type: 'tabletop', kind: 'bowl' }, // lazy Susan
-    { type: 'dining', kind: 'china' }, // can organiser / lazy Susan
+    { type: 'pantry', kind: 'lazysusan' },
+    { type: 'pantry', kind: 'canorg' }, // can organizers
+    { type: 'pantry', kind: 'jarlabels' }, // labels and jar labels
+    { type: 'pantry', kind: 'chalkboard' }, // inventory list
+    { type: 'pantry', kind: 'apronhook' }, // hooks for aprons
+    { type: 'pantry', kind: 'apothecary', count: 2 },
+    { type: 'pantry', kind: 'spicerack' },
     { type: 'archlight', kind: 'ledstrip' }, // under-shelf lighting
-    { type: 'walldecor', kind: 'clock' }, // inventory list
-    { type: 'towelrack' }, // hooks for aprons
     { type: 'walldecor', kind: 'shelf' },
   ],
   closet: [
     // Furniture — storage is the point, but a walk-in still needs floor to stand
-    // on, so the runs are kept to the walls.
-    { type: 'storage', kind: 'shelving', count: 2 }, // custom shelving / shoe racks
-    { type: 'storage', kind: 'cabinet' }, // drawer units
-    { type: 'storage', kind: 'chest' }, // centre island
-    { type: 'seating', kind: 'bench' }, // bench
-    { type: 'functional', kind: 'coatrack' }, // valet stand
+    // on, so the runs stay modest.
+    { type: 'closet', kind: 'closetshelf', count: 2 }, // custom shelving
+    { type: 'closet', kind: 'rod2' }, // hanging rods, single and double
+    { type: 'closet', kind: 'shoerack' },
+    { type: 'closet', kind: 'closetdrawer' }, // drawer units
+    { type: 'closet', kind: 'closetisland' }, // centre island
+    { type: 'closet', kind: 'valet' }, // valet stand
     // Design objects.
-    { type: 'vamirror' }, // full-length mirror
-    { type: 'archlight', kind: 'ledstrip', count: 2 }, // closet lighting
-    { type: 'tabletop', kind: 'tray' }, // perfume tray
-    { type: 'tabletop', kind: 'box' }, // jewellery organisers
+    { type: 'closet', kind: 'fullmirror' },
+    { type: 'closet', kind: 'closetlight', count: 2 }, // closet lighting
+    { type: 'closet', kind: 'divider' }, // drawer dividers
+    { type: 'closet', kind: 'hanger' }, // velvet hangers
+    { type: 'closet', kind: 'jewelorganiser' },
     { type: 'functional', kind: 'laundry' }, // laundry hamper
-    { type: 'towelrack' }, // scarf / belt hooks
+    { type: 'closet', kind: 'closetbench' },
+    { type: 'closet', kind: 'perftray' },
+    { type: 'closet', kind: 'belt' }, // scarf / belt hooks
   ],
 };
+
 
 /**
  * Ensure every room gets at least one ceiling light.

@@ -709,6 +709,191 @@ const DINING = build('dining', 'floor', { c: [...WOOD, ...FABRIC, ...LIGHT], a: 
   { n: 'Lazy Susan Cabinet', k: 'china', s: 'Cottage', w: 1.0, d: 1.0, h: 1.8, sp: { corner: true } },
 ]);
 
+// ------------------------------------------------- nursery, kids & baby gear
+// The rules for a nursery and a kids' room name things no other category held —
+// a crib, a changing table, a bassinet, a mobile. A step naming one of those
+// used to fall back to a plain bed or chest, so the room came out as a bedroom
+// with the wrong furniture in it.
+const NURSERY = build('nursery', 'floor', { c: ['#e8d9c8', '#d9e2ec', '#f0e0d0', '#cfd9e8', '#e6d5c4', '#dce8e0'], a: ['#c98a5e', '#7d9cc0', '#b08968', '#8fb3a0', '#d9a441', '#a58a9c'] }, [
+  { n: 'Convertible Crib', k: 'crib', s: 'Classic', w: 1.4, d: 0.75, h: 0.95, sp: { shape: 'crib', slats: 12 } },
+  { n: 'Changing Table', k: 'changing', s: 'Scandi', w: 1.0, d: 0.55, h: 0.9, sp: { shape: 'cabinet', doors: 0, drawers: 2, plinth: true } },
+  { n: 'Bassinet on Wheels', k: 'bassinet', s: 'Vintage', w: 0.8, d: 0.45, h: 0.95, sp: { shape: 'crib', hood: true, wheels: true } },
+  { n: 'Glider Rocking Chair', k: 'glider', s: 'Modern', w: 0.8, d: 0.9, h: 1.0, sp: { shape: 'chair', glider: true } },
+  { n: 'Diaper Pail', k: 'pail', s: 'Modern', w: 0.4, d: 0.4, h: 0.6, sp: { shape: 'jar', lid: true } },
+  { n: 'Bunk Bed', k: 'bunk', s: 'Classic', w: 2.0, d: 1.0, h: 1.7, sp: { shape: 'bunk' } },
+  { n: 'Crib Mobile', k: 'mobile', s: 'Dreamy', w: 0.5, d: 0.5, h: 0.4, m: 'ceiling', sp: { shape: 'drop', arms: 4, drops: true } },
+  { n: 'Baby Monitor', k: 'monitor', s: 'Modern', w: 0.16, d: 0.1, h: 0.2, m: 'surface', sp: { shape: 'small', screen: true } },
+  { n: 'Sound Machine', k: 'soundmachine', s: 'Modern', w: 0.16, d: 0.16, h: 0.18, m: 'surface', sp: { shape: 'jar', knobs: true } },
+  { n: 'Nightlight Plug', k: 'nightlight', s: 'Plain', w: 0.08, d: 0.05, h: 0.1, m: 'wall', sp: { shape: 'wallflat', bulbs: true } },
+  { n: 'Soft Toy Basket', k: 'toybasket', s: 'Playful', w: 0.5, d: 0.4, h: 0.35, sp: { shape: 'bin', soft: true } },
+  { n: 'Star Projector', k: 'starprojector', s: 'Dreamy', w: 0.16, d: 0.16, h: 0.16, m: 'wall', sp: { shape: 'wallflat', dome: true } },
+  { n: 'Glow Star Decals', k: 'glowstar', s: 'Playful', w: 0.9, d: 0.05, h: 0.6, m: 'wall', sp: { shape: 'wallflat', stars: 7 } },
+  { n: 'Hanging Canopy', k: 'canopy', s: 'Dreamy', w: 1.6, d: 1.6, h: 1.9, m: 'ceiling', sp: { shape: 'drop', canopy: true } },
+  { n: 'Bunting Garland', k: 'bunting', s: 'Playful', w: 1.8, d: 0.04, h: 0.3, m: 'wall', sp: { shape: 'wallflat', flags: 9 } },
+  { n: 'Moses Basket', k: 'moses', s: 'Vintage', w: 0.7, d: 0.4, h: 0.3, sp: { shape: 'bin', woven: true } },
+  { n: 'Toy Bin Trolley', k: 'toybin', s: 'Playful', w: 0.7, d: 0.35, h: 0.6, sp: { shape: 'cabinet', doors: 0, drawers: 2, wheels: true, open: true } },
+  { n: 'Book Light', k: 'booklight', s: 'Classic', w: 0.12, d: 0.12, h: 0.14, m: 'wall', sp: { shape: 'wallflat', arm: true } },
+  { n: 'Changing Mat', k: 'pad', s: 'Plain', w: 0.8, d: 0.5, h: 0.06, m: 'surface', sp: { shape: 'mat', pad: true } },
+  { n: 'Rocking Horse', k: 'horse', s: 'Vintage', w: 0.9, d: 0.35, h: 0.8, sp: { shape: 'horse' } },
+]);
+
+// ------------------------------------------------------------- home gym gear
+// Every item the rules name for a home gym was absent, so a gym used to fill
+// with media consoles and benches. This is the actual equipment.
+const GYM = build('gym', 'floor', { c: ['#2f3646', '#3d405b', '#4b5563', '#5b6573', '#1f2933', '#6e7681'], a: ['#c46a4a', '#d9a441', '#5f8f7f', '#8d99ae', '#a26769', '#2f6f5e'] }, [
+  { n: 'Treadmill', k: 'treadmill', s: 'Modern', w: 0.9, d: 2.0, h: 1.3, sp: { shape: 'machine', belt: true } },
+  { n: 'Spin Bike', k: 'bike', s: 'Studio', w: 0.6, d: 1.2, h: 1.2, sp: { shape: 'machine', flywheel: true } },
+  { n: 'Rowing Machine', k: 'rower', s: 'Studio', w: 0.6, d: 2.2, h: 0.8, sp: { shape: 'machine', rail: true } },
+  { n: 'Squat Rack', k: 'squatrack', s: 'Commercial', w: 1.4, d: 1.2, h: 2.2, sp: { shape: 'rack', bars: 1 } },
+  { n: 'Weight Bench', k: 'weightbench', s: 'Commercial', w: 0.6, d: 1.3, h: 0.5, sp: { shape: 'bench', pad: true } },
+  { n: 'Dumbbell Rack', k: 'dumbbellrack', s: 'Commercial', w: 1.2, d: 0.4, h: 0.6, sp: { shape: 'tiers', pairs: 4 } },
+  { n: 'Kettlebell Set', k: 'kettlebell', s: 'Commercial', w: 0.8, d: 0.4, h: 0.45, sp: { shape: 'bellrow', bells: 4 } },
+  { n: 'Medicine Ball', k: 'medball', s: 'Studio', w: 0.3, d: 0.3, h: 0.3, sp: { shape: 'jar', ball: true } },
+  { n: 'Punching Bag', k: 'punchingbag', s: 'Boxing', w: 0.4, d: 0.4, h: 1.9, sp: { shape: 'post', bag: true } },
+  { n: 'Pull-up Bar', k: 'pullup', s: 'Studio', w: 1.2, d: 0.15, h: 0.25, m: 'wall', sp: { shape: 'rod', brackets: 2 } },
+  { n: 'Cable Machine', k: 'cablemachine', s: 'Commercial', w: 0.8, d: 0.6, h: 2.2, sp: { shape: 'rack', stack: 4 } },
+  { n: 'Weight Plate Tree', k: 'platetree', s: 'Commercial', w: 0.5, d: 0.5, h: 1.2, sp: { shape: 'post', plates: true } },
+  { n: 'Yoga Mat', k: 'yogamat', s: 'Plain', w: 0.7, d: 1.8, h: 0.03, sp: { shape: 'mat', rolled: true } },
+  { n: 'Foam Roller', k: 'foamroller', s: 'Studio', w: 0.2, d: 0.6, h: 0.2, sp: { shape: 'jar', roller: true } },
+  { n: 'Step Platform', k: 'step', s: 'Studio', w: 0.8, d: 0.5, h: 0.3, sp: { shape: 'step', tiers: 2 } },
+  { n: 'Ab Wheel', k: 'abwheel', s: 'Studio', w: 0.35, d: 0.3, h: 0.35, sp: { shape: 'rack', ring: true } },
+  { n: 'Jump Rope', k: 'jumprope', s: 'Studio', w: 0.2, d: 0.2, h: 0.05, m: 'surface', sp: { shape: 'small', coil: true } },
+  { n: 'Resistance Bands', k: 'bands', s: 'Studio', w: 0.22, d: 0.22, h: 0.06, m: 'surface', sp: { shape: 'small', loops: true } },
+  { n: 'Water Bottle Station', k: 'bottlestation', s: 'Modern', w: 0.6, d: 0.35, h: 1.1, sp: { shape: 'cabinet', doors: 0, tiers: 2, bottles: true } },
+  { n: 'Sound System Speaker', k: 'soundsystem', s: 'Studio', w: 0.4, d: 0.35, h: 0.8, sp: { shape: 'trunk', cones: true } },
+]);
+
+// ------------------------------------------------------- laundry & utility
+// Washer, dryer, hanging rod, drying rack, ironing board, clothespins. None of
+// these existed, so a laundry room filled with kitchen cabinets instead.
+const LAUNDRY = build('laundry', 'floor', { c: ['#e0dcd5', '#d9d2c5', '#ece7dd', '#c9d2d9', '#e8e3d9', '#d4dde2'], a: ['#4b5563', '#5b6573', '#8a8f99', '#3d405b', '#6e7681', '#2f3e46'] }, [
+  { n: 'Front Load Washer', k: 'washer', s: 'Modern', w: 0.6, d: 0.6, h: 0.85, sp: { shape: 'appliance', door: true } },
+  { n: 'Front Load Dryer', k: 'dryer', s: 'Modern', w: 0.6, d: 0.6, h: 0.85, sp: { shape: 'appliance', door: true, vent: true } },
+  { n: 'Stacked Washer Dryer', k: 'stackpair', s: 'Modern', w: 0.6, d: 0.6, h: 1.7, sp: { shape: 'appliance', door: true, stack: 2 } },
+  { n: 'Folding Counter', k: 'foldcounter', s: 'Utility', w: 1.2, d: 0.6, h: 0.9, sp: { shape: 'cabinet', doors: 0, plinth: true, top: true } },
+  { n: 'Utility Sink', k: 'utilsink', s: 'Utility', w: 0.6, d: 0.55, h: 0.9, sp: { shape: 'cabinet', doors: 2, basin: true } },
+  { n: 'Laundry Base Cabinet', k: 'laundrycab', s: 'Shaker', w: 0.9, d: 0.6, h: 0.88, sp: { shape: 'cabinet', doors: 2, plinth: true } },
+  { n: 'Laundry Wall Cabinet', k: 'laundrywall', s: 'Shaker', w: 0.9, d: 0.35, h: 1.5, m: 'wall', sp: { shape: 'cabinet', doors: 2 } },
+  { n: 'Hanging Rod', k: 'rod', s: 'Utility', w: 1.2, d: 0.4, h: 1.7, sp: { shape: 'rod', brackets: 2, hanging: true } },
+  { n: 'Drying Rack', k: 'dryingrack', s: 'Utility', w: 1.0, d: 0.6, h: 1.1, sp: { shape: 'rack', bars: 7 } },
+  { n: 'Ironing Board', k: 'ironingboard', s: 'Utility', w: 1.3, d: 0.4, h: 0.9, sp: { shape: 'boardiron', legs: true } },
+  { n: 'Iron Rest', k: 'iron', s: 'Utility', w: 0.2, d: 0.3, h: 0.3, m: 'surface', sp: { shape: 'small', wedge: true } },
+  { n: 'Clothespin Jar', k: 'clothespin', s: 'Cottage', w: 0.14, d: 0.14, h: 0.2, m: 'surface', sp: { shape: 'jar', pegs: true } },
+  { n: 'Detergent Jar Set', k: 'detergent', s: 'Plain', w: 0.34, d: 0.18, h: 0.3, m: 'surface', sp: { shape: 'jarset', jars: 3 } },
+  { n: 'Sorting Hamper', k: 'hamper', s: 'Utility', w: 0.55, d: 0.5, h: 0.75, sp: { shape: 'bin', canvas: true, bands: 2 } },
+  { n: 'Lint Bin', k: 'lintbin', s: 'Utility', w: 0.24, d: 0.24, h: 0.3, sp: { shape: 'jar', vent: true } },
+  { n: 'Utility Shelf', k: 'utilityshelf', s: 'Utility', w: 1.0, d: 0.35, h: 1.8, sp: { shape: 'shelf', shelves: 4, uprights: 2 } },
+  { n: 'Wall Hook Rail', k: 'hookrail', s: 'Utility', w: 0.9, d: 0.06, h: 0.2, m: 'wall', sp: { shape: 'wallflat', hooks: 4 } },
+  { n: 'Laundry Trolley', k: 'trolley', s: 'Utility', w: 0.7, d: 0.5, h: 0.9, sp: { shape: 'cabinet', doors: 0, drawers: 1, wheels: true } },
+  { n: 'Ironing Board Cover', k: 'boardcover', s: 'Plain', w: 0.3, d: 0.2, h: 0.08, m: 'surface', sp: { shape: 'small', folded: true } },
+  { n: 'Laundry Floor Mat', k: 'laundrymat', s: 'Plain', w: 0.8, d: 0.5, h: 0.02, m: 'surface', sp: { shape: 'mat' } },
+]);
+
+// ------------------------------------------------------ office, study & desk
+// Filing cabinets, monitors, keyboards, footrests, cable trays, globes, busts
+// and reading-glasses stands. The study and library rules name several of
+// these too.
+const OFFICE = build('office', 'floor', { c: [...WOOD, ...METAL, ...LIGHT], a: [...WOOD_DARK, ...BRASS, ...FABRIC_DARK] }, [
+  { n: 'Executive Desk', k: 'desk', s: 'Classic', w: 1.6, d: 0.8, h: 0.75, sp: { shape: 'trunk', drawers: 3, leather: true } },
+  { n: 'Ergonomic Task Chair', k: 'taskchair', s: 'Studio', w: 0.65, d: 0.65, h: 1.15, sp: { shape: 'chair', wheels: true, tall: true } },
+  { n: 'Filing Cabinet', k: 'filing', s: 'Modern', w: 0.45, d: 0.6, h: 1.3, sp: { shape: 'cabinet', drawers: 4 } },
+  { n: 'Standing Desk Converter', k: 'standing', s: 'Studio', w: 1.2, d: 0.6, h: 1.1, sp: { shape: 'trunk', riser: true } },
+  { n: 'Monitor', k: 'monitor', s: 'Modern', w: 0.6, d: 0.2, h: 0.45, m: 'surface', sp: { shape: 'small', screen: true, stand: true } },
+  { n: 'Keyboard', k: 'keyboard', s: 'Modern', w: 0.44, d: 0.15, h: 0.03, m: 'surface', sp: { shape: 'small', keys: true } },
+  { n: 'Mouse', k: 'mouse', s: 'Modern', w: 0.07, d: 0.11, h: 0.04, m: 'surface', sp: { shape: 'small', dome: true } },
+  { n: 'Footrest', k: 'footrest', s: 'Studio', w: 0.45, d: 0.35, h: 0.12, m: 'surface', sp: { shape: 'step', tilted: true } },
+  { n: 'Cable Tray', k: 'cabletray', s: 'Studio', w: 0.6, d: 0.12, h: 0.08, m: 'surface', sp: { shape: 'small', tray: true } },
+  { n: 'Desk Organiser', k: 'organiser', s: 'Classic', w: 0.3, d: 0.2, h: 0.16, m: 'surface', sp: { shape: 'small', compartments: true } },
+  { n: 'Wastebasket', k: 'wastebasket', s: 'Studio', w: 0.3, d: 0.3, h: 0.4, sp: { shape: 'jar', open: true } },
+  { n: 'Printer', k: 'printer', s: 'Modern', w: 0.45, d: 0.4, h: 0.28, m: 'surface', sp: { shape: 'trunk', tray: true } },
+  { n: 'Document Tray', k: 'doctray', s: 'Modern', w: 0.32, d: 0.25, h: 0.3, m: 'surface', sp: { shape: 'small', stack: 3 } },
+  { n: 'Whiteboard', k: 'whiteboard', s: 'Studio', w: 1.2, d: 0.05, h: 0.9, m: 'wall', sp: { shape: 'wallflat', frame: true } },
+  { n: 'Desk Globe', k: 'globe', s: 'Classic', w: 0.3, d: 0.3, h: 0.42, m: 'surface', sp: { shape: 'small', globe: true } },
+  { n: 'Reading Glasses Stand', k: 'glassesstand', s: 'Classic', w: 0.14, d: 0.1, h: 0.14, m: 'surface', sp: { shape: 'small', post: true } },
+  { n: 'Classical Bust', k: 'bust', s: 'Classical', w: 0.28, d: 0.24, h: 0.5, m: 'surface', sp: { shape: 'bust' } },
+  { n: 'Rolling Library Ladder', k: 'rollingladder', s: 'Library', w: 0.5, d: 0.3, h: 2.2, sp: { shape: 'ladder', rails: 2 } },
+  { n: 'Decorative Tissue Box', k: 'tissue', s: 'Classic', w: 0.24, d: 0.12, h: 0.12, m: 'surface', sp: { shape: 'small', tray: true, wide: true, tissue: true } },
+  { n: 'Pin Board', k: 'pinboard', s: 'Studio', w: 0.9, d: 0.05, h: 0.6, m: 'wall', sp: { shape: 'wallflat', notes: true } },
+]);
+
+// ------------------------------------------------- pantry & kitchen sundries
+// Can organizers, labels, a chalkboard inventory list, utensil crocks and
+// cutting boards — the kitchen and pantry rules name all of these.
+const PANTRY = build('pantry', 'floor', { c: [...WOOD, ...CERAMIC, ...LIGHT], a: [...WOOD_DARK, ...BRASS, ...METAL] }, [
+  { n: 'Adjustable Pantry Shelving', k: 'pantryshelf', s: 'Utility', w: 1.0, d: 0.4, h: 2.0, sp: { shape: 'shelf', shelves: 5, uprights: 4, holes: true } },
+  { n: 'Freestanding Pantry Cabinet', k: 'pantrycab', s: 'Shaker', w: 0.9, d: 0.45, h: 1.9, sp: { shape: 'cabinet', doors: 2, plinth: true } },
+  { n: 'Pantry Rolling Cart', k: 'pantrycart', s: 'Cottage', w: 0.7, d: 0.4, h: 0.85, sp: { shape: 'cabinet', doors: 0, drawers: 3, wheels: true } },
+  { n: 'Wine Rack', k: 'pantrywine', s: 'Cellar', w: 0.6, d: 0.35, h: 1.1, sp: { shape: 'shelf', shelves: 4, bottles: true } },
+  { n: 'Step Stool', k: 'stepstool', s: 'Plain', w: 0.4, d: 0.35, h: 0.45, sp: { shape: 'step', tiers: 2, wooden: true } },
+  { n: 'Clear Storage Bin', k: 'clearbin', s: 'Plain', w: 0.32, d: 0.24, h: 0.2, m: 'surface', sp: { shape: 'small', clear: true } },
+  { n: 'Can Organizer', k: 'canorg', s: 'Utility', w: 0.36, d: 0.26, h: 0.42, m: 'surface', sp: { shape: 'rack', cans: 6, shallow: true } },
+  { n: 'Lazy Susan', k: 'lazysusan', s: 'Utility', w: 0.35, d: 0.35, h: 0.1, m: 'surface', sp: { shape: 'jar', disc: true, handles: true } },
+  { n: 'Jar Labels', k: 'jarlabels', s: 'Plain', w: 0.16, d: 0.16, h: 0.05, m: 'surface', sp: { shape: 'small', sheet: true } },
+  { n: 'Inventory Chalkboard', k: 'chalkboard', s: 'Cottage', w: 0.8, d: 0.04, h: 1.0, m: 'wall', sp: { shape: 'wallflat', chalk: true, frame: true } },
+  { n: 'Backsplash Tile Panel', k: 'backsplash', s: 'Plain', w: 1.2, d: 0.03, h: 0.5, m: 'wall', sp: { shape: 'wallflat', tiles: true } },
+  { n: 'Spice Rack', k: 'spicerack', s: 'Plain', w: 0.3, d: 0.12, h: 0.34, m: 'surface', sp: { shape: 'shelf', shelves: 2, jars: true } },
+  { n: 'Bread Box', k: 'breadbox', s: 'Cottage', w: 0.4, d: 0.25, h: 0.22, m: 'surface', sp: { shape: 'trunk', lid: true } },
+  { n: 'Egg Shelf', k: 'eggshelf', s: 'Cottage', w: 0.3, d: 0.22, h: 0.18, m: 'surface', sp: { shape: 'small', eggs: true } },
+  { n: 'Pantry Pull-out Drawer', k: 'pantrydrawer', s: 'Utility', w: 0.6, d: 0.5, h: 0.3, sp: { shape: 'cabinet', doors: 0, drawers: 1, open: true } },
+  { n: 'Storage Crate', k: 'crate', s: 'Rustic', w: 0.45, d: 0.35, h: 0.3, sp: { shape: 'bin', slats: true } },
+  { n: 'Apothecary Jar', k: 'apothecary', s: 'Vintage', w: 0.16, d: 0.16, h: 0.28, m: 'surface', sp: { shape: 'jar', lid: true } },
+  { n: 'Utensil Crock', k: 'crock', s: 'Cottage', w: 0.16, d: 0.16, h: 0.26, m: 'surface', sp: { shape: 'jar', utensils: true } },
+  { n: 'Cutting Board', k: 'board', s: 'Farmhouse', w: 0.42, d: 0.28, h: 0.03, m: 'surface', sp: { shape: 'small', board: true } },
+  { n: 'Apron Hook Rail', k: 'apronhook', s: 'Cottage', w: 0.8, d: 0.06, h: 0.18, m: 'wall', sp: { shape: 'wallflat', hooks: 3 } },
+]);
+
+// -------------------------------------------------- outdoor & sunroom pieces
+// A porch swing, wind chimes, lanterns and a bird feeder: the sunroom rules
+// name all four and none of them existed.
+const OUTDOOR = build('outdoor', 'floor', { c: ['#b08968', '#c9a97a', '#8a6b45', '#a3b18a', '#d8c3a5', '#9c7f5e'], a: ['#4f7a4a', '#3f6b3f', '#5f8f5a', '#2f6f5e', '#7aa05f', '#8d99ae'] }, [
+  { n: 'Porch Swing', k: 'porchswing', s: 'Rustic', w: 1.6, d: 0.8, h: 2.0, sp: { shape: 'swing', chains: true } },
+  { n: 'Rattan Sofa', k: 'rattansofa', s: 'Coastal', w: 1.9, d: 0.85, h: 0.85, sp: { shape: 'sofa', wicker: true } },
+  { n: 'Rattan Lounge Chair', k: 'rattanchair', s: 'Coastal', w: 0.8, d: 0.85, h: 0.85, sp: { shape: 'chair', wicker: true } },
+  { n: 'Wicker Side Table', k: 'wickertable', s: 'Coastal', w: 0.5, d: 0.5, h: 0.5, sp: { shape: 'trunk', round: true, wicker: true } },
+  { n: 'Wind Chimes', k: 'chimes', s: 'Plain', w: 0.2, d: 0.2, h: 0.5, m: 'ceiling', sp: { shape: 'drop', tubes: 5 } },
+  { n: 'Bird Feeder', k: 'feeder', s: 'Rustic', w: 0.3, d: 0.3, h: 0.4, sp: { shape: 'post', roof: true } },
+  { n: 'Paper Lantern', k: 'lantern', s: 'Plain', w: 0.3, d: 0.3, h: 0.45, m: 'ceiling', sp: { shape: 'drop', globe: true, lit: true } },
+  { n: 'Outdoor Area Rug', k: 'outdoorrug', s: 'Coastal', w: 2.0, d: 1.4, h: 0.02, sp: { shape: 'mat', stripes: true } },
+  { n: 'Parasol', k: 'parasol', s: 'Coastal', w: 2.0, d: 2.0, h: 2.2, sp: { shape: 'post', canopy: true } },
+  { n: 'Bistro Set', k: 'bistro', s: 'Parisian', w: 0.7, d: 0.7, h: 0.75, sp: { shape: 'trunk', round: true, bistro: true } },
+  { n: 'Garden Stool', k: 'gardenstool', s: 'Rustic', w: 0.4, d: 0.4, h: 0.45, sp: { shape: 'step', tiers: 1, wooden: true } },
+  { n: 'Doormat', k: 'doormat', s: 'Plain', w: 0.8, d: 0.5, h: 0.02, sp: { shape: 'mat', coir: true } },
+  { n: 'Planter Box', k: 'planter', s: 'Rustic', w: 0.8, d: 0.4, h: 0.45, sp: { shape: 'bin', slats: true, plants: true } },
+  { n: 'Trellis', k: 'trellis', s: 'Rustic', w: 1.0, d: 0.06, h: 1.8, m: 'wall', sp: { shape: 'wallflat', slats: true } },
+  { n: 'Watering Can', k: 'wateringcan', s: 'Rustic', w: 0.3, d: 0.18, h: 0.35, sp: { shape: 'jar', spout: true } },
+  { n: 'Hose Reel', k: 'hosereel', s: 'Utility', w: 0.5, d: 0.25, h: 0.5, m: 'wall', sp: { shape: 'wallflat', drum: true } },
+  { n: 'Outdoor Bench', k: 'outdoorbench', s: 'Rustic', w: 1.6, d: 0.45, h: 0.45, sp: { shape: 'bench', slats: true } },
+  { n: 'Mailbox', k: 'mailbox', s: 'Plain', w: 0.22, d: 0.3, h: 0.25, m: 'wall', sp: { shape: 'wallflat', boxy: true } },
+  { n: 'Fire Pit', k: 'firepit', s: 'Rustic', w: 0.8, d: 0.8, h: 0.35, sp: { shape: 'jar', bowl: true } },
+  { n: 'Outdoor Side Table', k: 'outdoorside', s: 'Coastal', w: 0.45, d: 0.45, h: 0.55, sp: { shape: 'trunk', round: true, slats: true } },
+]);
+
+// ------------------------------------------------ closet & dressing storage
+// Hanging rods, valet stands, velvet hangers, drawer dividers and luggage
+// racks — named by the walk-in closet and guest room rules.
+const CLOSET = build('closet', 'floor', { c: [...WOOD, ...METAL, ...LIGHT], a: [...WOOD_DARK, ...BRASS, ...FABRIC_DARK] }, [
+  { n: 'Custom Closet Shelving', k: 'closetshelf', s: 'Contemporary', w: 1.2, d: 0.6, h: 2.2, sp: { shape: 'shelf', shelves: 4, uprights: 2, hanging: true } },
+  { n: 'Double Hanging Rod', k: 'rod2', s: 'Contemporary', w: 1.2, d: 0.6, h: 2.0, sp: { shape: 'rod', brackets: 2, hanging: true, tiers: 2 } },
+  { n: 'Valet Stand', k: 'valet', s: 'Classic', w: 0.5, d: 0.5, h: 1.8, sp: { shape: 'post', arms: 3 } },
+  { n: 'Velvet Hanger', k: 'hanger', s: 'Classic', w: 0.42, d: 0.1, h: 0.12, m: 'surface', sp: { shape: 'small', hanger: true } },
+  { n: 'Drawer Divider', k: 'divider', s: 'Plain', w: 0.4, d: 0.3, h: 0.06, m: 'surface', sp: { shape: 'small', grid: true } },
+  { n: 'Tiered Shoe Rack', k: 'shoerack', s: 'Metal', w: 0.7, d: 0.3, h: 0.8, sp: { shape: 'tiers', pairs: 4, shoes: true } },
+  { n: 'Closet Drawer Unit', k: 'closetdrawer', s: 'Contemporary', w: 0.8, d: 0.55, h: 0.9, sp: { shape: 'cabinet', drawers: 5 } },
+  { n: 'Closet Island', k: 'closetisland', s: 'Luxury', w: 1.2, d: 0.8, h: 0.9, sp: { shape: 'cabinet', doors: 0, drawers: 2, glass: true, top: true } },
+  { n: 'Full-length Mirror', k: 'fullmirror', s: 'Classic', w: 0.5, d: 0.05, h: 1.7, m: 'wall', sp: { shape: 'wallflat', mirror: true, tall: true } },
+  { n: 'Closet Light Strip', k: 'closetlight', s: 'Modern', w: 1.0, d: 0.05, h: 0.06, m: 'wall', sp: { shape: 'wallflat', strip: true, lit: true } },
+  { n: 'Jewellery Organiser', k: 'jewelorganiser', s: 'Luxury', w: 0.28, d: 0.2, h: 0.12, m: 'surface', sp: { shape: 'small', compartments: true, velvet: true } },
+  { n: 'Cedar Hanger', k: 'cedar', s: 'Classic', w: 0.42, d: 0.12, h: 0.14, m: 'surface', sp: { shape: 'small', hanger: true, shaped: true } },
+  { n: 'Closet Bench', k: 'closetbench', s: 'Upholstered', w: 1.1, d: 0.45, h: 0.48, sp: { shape: 'bench', pad: true, buttoned: true } },
+  { n: 'Perfume Tray', k: 'perftray', s: 'Luxury', w: 0.3, d: 0.2, h: 0.04, m: 'surface', sp: { shape: 'small', tray: true, bottles: true } },
+  { n: 'Belt & Scarf Hook', k: 'belt', s: 'Classic', w: 0.3, d: 0.06, h: 0.12, m: 'wall', sp: { shape: 'wallflat', hooks: 3 } },
+  { n: 'Luggage Rack', k: 'luggage', s: 'Classic', w: 0.6, d: 0.45, h: 0.5, sp: { shape: 'rack', bars: 5, xframe: true } },
+  { n: 'Hat Shelf', k: 'hatshelf', s: 'Classic', w: 0.8, d: 0.25, h: 1.6, sp: { shape: 'shelf', shelves: 3, hats: true } },
+  { n: 'Closet Basket', k: 'basketbin', s: 'Cottage', w: 0.4, d: 0.35, h: 0.3, sp: { shape: 'bin', canvas: true } },
+  { n: 'Hanger Bar', k: 'hangerbar', s: 'Metal', w: 0.8, d: 0.08, h: 0.08, m: 'wall', sp: { shape: 'rod', brackets: 2 } },
+  { n: 'Hook Rail', k: 'closethook', s: 'Metal', w: 0.7, d: 0.06, h: 0.16, m: 'wall', sp: { shape: 'wallflat', hooks: 5 } },
+]);
+
 export const LIBRARY: FurnItem[] = [
   ...SEATING, ...TABLES, ...STORAGE, ...BEDS,
   ...CEILING, ...WALLLIGHT, ...LAMPS, ...ARCH,
@@ -716,6 +901,7 @@ export const LIBRARY: FurnItem[] = [
   ...TEXTILES, ...WALLDECOR, ...TABLETOP, ...FUNCTIONAL,
   ...KITCHEN, ...DINING,
   ...VANITY, ...BATHTUB, ...SHOWER, ...TOILET, ...TOWELRACK, ...VAMIRROR,
+  ...NURSERY, ...GYM, ...LAUNDRY, ...OFFICE, ...PANTRY, ...OUTDOOR, ...CLOSET,
 ];
 
 export const ITEM_INDEX: Map<string, FurnItem> = new Map(LIBRARY.map((i) => [i.id, i]));

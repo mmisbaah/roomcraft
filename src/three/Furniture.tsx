@@ -2634,6 +2634,915 @@ function VanityMirror({ f }: { f: FurnItem }) {
 }
 
 // ------------------------------------------------------------------ wrapper
+/**
+ * One parametric builder for the rule-driven categories (nursery, gym, laundry,
+ * office, pantry, outdoor, closet).
+ *
+ * Those 140 pieces were added so the room rules could be followed literally,
+ * and they are mostly variations on a handful of forms — a carcass, a frame, a
+ * panel, a jar. Writing seven bespoke builders would have been seven chances to
+ * drift out of proportion with each other, so each item instead names a `shape`
+ * in its spec and the fine detail is driven by the flags beside it. Anything
+ * that is genuinely its own object (a crib's slats, a washing machine's door)
+ * still gets modelled properly here.
+ */
+function Accessory({ f }: { f: FurnItem }) {
+  const { w, d } = f;
+  const sp = f.spec;
+  const c = f.color;
+  const a = f.accent;
+  const h = f.h || 0.5;
+  const parts: React.ReactNode[] = [];
+  const back = d / 2;
+
+  switch (sp.shape) {
+    // ------------------------------------------------------------- casegoods
+    case 'cabinet': {
+      const doors = sp.doors ?? 0;
+      const drawers = sp.drawers ?? 0;
+      const bodyH = sp.plinth ? h - 0.08 : h;
+      if (sp.top) parts.push(box('top', [w + 0.04, 0.05, d + 0.04], [0, h - 0.025, 0], a));
+      if (sp.basin) {
+        parts.push(box('body', [w, bodyH, d], [0, bodyH / 2, 0], c));
+        parts.push(box('basin', [w * 0.7, 0.06, d * 0.6], [0, h - 0.03, 0], '#c8d2d6', [0, 0, 0], 0.35));
+        parts.push(cyl('tap', [0.018, 0.018, 0.22, 10], [0, h + 0.11, -d * 0.28], a));
+        parts.push(cyl('spout', [0.014, 0.014, 0.14, 8], [0, h + 0.2, -d * 0.18], a, [Math.PI / 2.4, 0, 0]));
+      } else {
+        parts.push(box('body', [w, bodyH, d], [0, bodyH / 2, 0], c));
+      }
+      if (sp.plinth) parts.push(box('plinth', [w - 0.06, 0.08, d - 0.06], [0, 0.04, 0], '#4a4f57'));
+      if (sp.glass) parts.push(box('glass', [w - 0.08, bodyH - 0.12, d - 0.08], [0, bodyH / 2, 0], '#cfe0e6', [0, 0, 0], 0.2));
+      // doors / drawers across the front face
+      const face = d / 2 + 0.012;
+      if (doors) {
+        const pw = w / doors;
+        for (let i = 0; i < doors; i++) {
+          const x = -w / 2 + pw * (i + 0.5);
+          parts.push(box(`d${i}`, [pw - 0.03, bodyH - 0.06, 0.025], [x, bodyH / 2, face], a));
+          parts.push(box(`dh${i}`, [0.02, 0.12, 0.02], [x + pw / 2 - 0.06, bodyH * 0.55, face + 0.02], '#c9a227', undefined, 0.3));
+        }
+      }
+      let dy = sp.plinth ? 0.08 : 0;
+      for (let i = 0; i < drawers; i++) {
+        const dh = (h - dy) / drawers;
+        const x = sp.open ? 0 : -w / 2 + w / 2;
+        parts.push(box(`dr${i}`, [w - 0.05, dh - 0.02, sp.open ? 0.02 : 0.025], [x, dy + dh / 2, face + (sp.open ? dh * 0.35 : 0)], a));
+        if (!sp.open) parts.push(box(`drh${i}`, [w * 0.5, 0.015, 0.02], [x, dy + dh / 2, face + 0.025], '#c9a227', undefined, 0.3));
+        dy += dh;
+      }
+      if (sp.tiers) {
+        for (let i = 0; i < sp.tiers; i++) {
+          const ty = 0.1 + i * ((h - 0.2) / sp.tiers);
+          parts.push(box(`sh${i}`, [w - 0.06, 0.03, d - 0.06], [0, ty, 0], a));
+          if (sp.bottles) {
+            for (let k = 0; k < 3; k++) {
+              parts.push(cyl(`bt${i}${k}`, [0.035, 0.035, 0.22, 10], [-w / 3 + (w / 3) * k, ty + 0.13, 0], c));
+            }
+          }
+        }
+      }
+      if (sp.wheels) {
+        for (const sx2 of [-1, 1]) {
+          for (const sz2 of [-1, 1]) {
+            parts.push(cyl(`wh${sx2}${sz2}`, [0.035, 0.035, 0.03, 8], [sx2 * (w / 2 - 0.07), 0.035, sz2 * (d / 2 - 0.07)], '#3d405b', [Math.PI / 2, 0, 0]));
+          }
+        }
+      }
+      break;
+    }
+    case 'trunk': {
+      parts.push(box('body', [w, h - 0.08, d], [0, (h - 0.08) / 2 + 0.08, 0], c));
+      parts.push(box('top', [w + 0.03, 0.04, d + 0.03], [0, h - 0.02, 0], a));
+      if (sp.drawers) {
+        const n = sp.drawers;
+        const dh = (h - 0.14) / n;
+        for (let i = 0; i < n; i++) {
+          parts.push(box(`dr${i}`, [w * 0.3, dh - 0.02, 0.02], [w / 2 - w * 0.18, 0.1 + dh * (i + 0.5), d / 2 + 0.012], a));
+        }
+      }
+      if (sp.round) {
+        parts.push(cyl('topr', [w / 2, w / 2, 0.04, 20], [0, h - 0.02, 0], a));
+        for (let i = 0; i < 4; i++) {
+          const ang = (i / 4) * Math.PI * 2 + 0.4;
+          parts.push(cyl(`lg${i}`, [0.022, 0.022, 0.1, 8], [Math.cos(ang) * (w / 2 - 0.1), 0.05, Math.sin(ang) * (d / 2 - 0.1)], '#4a4f57'));
+        }
+      } else {
+        for (const sx2 of [-1, 1]) {
+          parts.push(box(`lg${sx2}`, [0.05, 0.08, d - 0.08], [sx2 * (w / 2 - 0.05), 0.04, 0], '#4a4f57'));
+        }
+      }
+      if (sp.slats) {
+        for (let i = 0; i < 4; i++) {
+          parts.push(box(`sl${i}`, [w - 0.06, 0.02, d - 0.06], [0, 0.1 + i * ((h - 0.16) / 4), 0], a));
+        }
+      }
+      if (sp.cones) {
+        for (const cy of [h * 0.45, h * 0.75]) {
+          parts.push(cyl(`cn${cy}`, [0.07, 0.09, 0.03, 14], [0, cy, d / 2 + 0.02], '#2f3646', [Math.PI / 2, 0, 0]));
+        }
+      }
+      if (sp.tray) parts.push(box('ptray', [w * 0.7, 0.02, 0.16], [0, h - 0.06, d / 2 + 0.08], '#d9d2c5'));
+      if (sp.lid) parts.push(box('lid', [w + 0.02, 0.05, d + 0.02], [0, h + 0.02, 0], a));
+      if (sp.riser) {
+        parts.push(box('lift', [w - 0.1, h - 0.1, 0.08], [0, (h - 0.1) / 2 + 0.06, -d / 2 + 0.08], '#4b5563'));
+        parts.push(box('crank', [0.04, 0.04, 0.22], [w / 2 - 0.08, h * 0.55, -d / 2 + 0.18], '#c9a227'));
+      }
+      if (sp.leather) parts.push(box('pad', [w - 0.12, 0.03, d - 0.16], [0, h + 0.015, 0], '#6b4f3f', undefined, 0.5));
+      break;
+    }
+    case 'shelf': {
+      const n = sp.shelves ?? 4;
+      const ups = sp.uprights ?? 2;
+      for (let i = 0; i < ups; i++) {
+        const x = ups === 1 ? 0 : -w / 2 + (w / (ups - 1)) * i;
+        parts.push(box(`up${i}`, [0.05, h, d], [x, h / 2, 0], c));
+      }
+      for (let i = 0; i <= n; i++) {
+        parts.push(box(`sh${i}`, [w, 0.035, d], [0, (h / n) * i + 0.02, 0], a));
+      }
+      if (sp.holes) {
+        for (let i = 0; i < ups; i++) {
+          const x = ups === 1 ? 0 : -w / 2 + (w / (ups - 1)) * i;
+          for (let k = 1; k < n * 4; k++) {
+            parts.push(box(`hl${i}${k}`, [0.012, 0.012, 0.012], [x, (h / (n * 4)) * k, d / 2 - 0.03], '#3d405b'));
+          }
+        }
+      }
+      if (sp.hanging) {
+        for (const ty of [h * 0.62, h * 0.94]) {
+          parts.push(cyl(`hr${ty}`, [0.014, 0.014, w - 0.1, 10], [0, ty, -d / 4], a, [0, 0, Math.PI / 2]));
+          for (let i = 0; i < 4; i++) {
+            parts.push(box(`hg${ty}${i}`, [0.2, 0.3, 0.04], [-w / 2 + 0.16 + (w - 0.3) * (i / 3), ty - 0.18, -d / 4], i % 2 ? c : a));
+          }
+        }
+      }
+      if (sp.bottles) {
+        for (let i = 0; i < n; i++) {
+          for (let k = 0; k < 3; k++) {
+            parts.push(cyl(`bt${i}${k}`, [0.035, 0.035, 0.26, 10], [-w / 3 + (w / 3) * k, (h / n) * i + 0.15, 0], i % 2 ? '#3f6b3e' : '#5b4636'));
+          }
+        }
+      }
+      if (sp.jars) {
+        for (let i = 0; i < n; i++) {
+          for (let k = 0; k < 4; k++) {
+            parts.push(cyl(`jr${i}${k}`, [0.028, 0.028, 0.08, 8], [-w / 2 + 0.1 + ((w - 0.2) / 3) * k, (h / n) * i + 0.06, 0], ['#c46a4a', '#d9a441', '#7d5a7a', '#4f7a4a'][k]));
+          }
+        }
+      }
+      if (sp.hats) {
+        for (let i = 0; i < n; i++) {
+          parts.push(cyl(`ht${i}`, [0.11, 0.11, 0.09, 14], [-w / 4, (h / n) * i + 0.09, 0], i % 2 ? c : a));
+        }
+      }
+      break;
+    }
+    // --------------------------------------------------------------- frames
+    case 'rack': {
+      const legs = 4;
+      for (let i = 0; i < legs; i++) {
+        const x = i % 2 === 0 ? -w / 2 + 0.05 : w / 2 - 0.05;
+        const z = i < 2 ? -d / 2 + 0.05 : d / 2 - 0.05;
+        parts.push(box(`lg${i}`, [0.06, h, 0.06], [x, h / 2, z], c));
+      }
+      if (sp.xframe) {
+        for (const sx2 of [-1, 1]) {
+          parts.push(box(`xm${sx2}`, [0.05, h, 0.05], [sx2 * (w / 2 - 0.05), h / 2, 0], a, [0.55, 0, 0]));
+        }
+      }
+      const bars = sp.bars ?? 5;
+      for (let i = 0; i < bars; i++) {
+        parts.push(cyl(`br${i}`, [0.012, 0.012, w - 0.12, 8], [0, 0.12 + i * ((h - 0.2) / bars), 0], a, [0, 0, Math.PI / 2]));
+      }
+      if (sp.ring) {
+        parts.push(cyl('ring', [0.16, 0.16, 0.05, 18], [0, h - 0.2, 0], a, [0, 0, Math.PI / 2]));
+        parts.push(box('stem', [0.05, 0.1, 0.05], [0, h - 0.14, 0], c));
+      }
+      if (sp.stack) {
+        for (let i = 0; i < sp.stack; i++) {
+          parts.push(box(`pl${i}`, [w - 0.16, 0.03, 0.16], [0, 0.5 + i * 0.45, 0], '#2f3646'));
+          for (const sx2 of [-1, 1]) {
+            parts.push(cyl(`pd${i}${sx2}`, [0.11, 0.11, 0.03, 14], [sx2 * w * 0.3, 0.5 + i * 0.45, 0], '#3d405b', [Math.PI / 2, 0, 0]));
+          }
+        }
+      }
+      if (sp.cans) {
+        for (let i = 0; i < sp.cans; i++) {
+          const col = i % 3;
+          const row = Math.floor(i / 3);
+          parts.push(cyl(`cn${i}`, [0.032, 0.032, 0.1, 12], [-w / 3 + col * (w / 3), 0.06 + row * 0.105, 0], ['#c46a4a', '#d9a227', '#5f8f7f'][col]));
+        }
+      }
+      break;
+    }
+    case 'rod': {
+      const y = sp.hanging ? h * 0.85 : 0;
+      parts.push(cyl('rod', [0.016, 0.016, w, 12], [0, y, 0], a, [0, 0, Math.PI / 2]));
+      const tiers = sp.tiers ?? 1;
+      for (let t = 0; t < tiers; t++) {
+        const ty = sp.hanging ? h * 0.85 - t * (h * 0.28) : 0;
+        if (t > 0) parts.push(cyl(`rod${t}`, [0.016, 0.016, w, 12], [0, ty, 0], a, [0, 0, Math.PI / 2]));
+        for (const sx2 of [-1, 1]) {
+          parts.push(box(`br${t}${sx2}`, [0.04, 0.05, 0.05], [sx2 * (w / 2 - 0.02), ty, 0], c));
+        }
+        if (sp.hanging) {
+          for (let i = 0; i < 5; i++) {
+            parts.push(box(`hg${t}${i}`, [0.22, 0.34, 0.04], [-w / 2 + 0.14 + ((w - 0.28) / 4) * i, ty - 0.19, 0], i % 2 ? c : a));
+          }
+        }
+      }
+      if (!sp.hanging) parts.push(box('strap', [0.05, 0.05, d], [0, 0, 0], c));
+      break;
+    }
+    case 'tiers': {
+      const tiers = sp.tiers ?? sp.pairs ?? 4;
+      const th = (h - 0.06) / tiers;
+      for (let i = 0; i < tiers; i++) {
+        const ty = 0.04 + i * th;
+        parts.push(box(`sh${i}`, [w, 0.03, d], [0, ty, 0], a));
+        const pairs = sp.pairs ?? 3;
+        for (let k = 0; k < pairs; k++) {
+          const x = -w / 2 + (w / pairs) * (k + 0.5);
+          if (sp.shoes) {
+            parts.push(box(`sh${i}s${k}`, [w / pairs - 0.06, 0.09, d * 0.6], [x, ty + 0.06, 0.02], k % 2 ? c : '#3d405b'));
+          } else {
+            for (const sx2 of [-1, 1]) {
+              parts.push(cyl(`db${i}${k}${sx2}`, [0.035, 0.035, 0.16, 8], [x + sx2 * 0.05, ty + 0.09, 0], '#2f3646', [0, 0, Math.PI / 2]));
+            }
+          }
+        }
+      }
+      for (const sx2 of [-1, 1]) {
+        parts.push(box(`up${sx2}`, [0.04, h, 0.04], [sx2 * (w / 2 - 0.02), h / 2, -d / 2 + 0.04], c));
+        parts.push(box(`up2${sx2}`, [0.04, h, 0.04], [sx2 * (w / 2 - 0.02), h / 2, d / 2 - 0.04], c));
+      }
+      break;
+    }
+    case 'bench': {
+      const seatY = sp.pad ? h - 0.06 : h - 0.04;
+      parts.push(box('seat', [w, sp.pad ? 0.12 : 0.05, d], [0, seatY, 0], sp.pad ? c : a, undefined, sp.pad ? 0.85 : undefined));
+      if (sp.buttoned) {
+        for (let i = 0; i < 3; i++) {
+          parts.push(sph(`bt${i}`, 0.02, [-w / 4 + (w / 4) * i, seatY + 0.12, d * 0.3], a));
+        }
+      }
+      if (sp.slats) {
+        for (let i = 0; i < 3; i++) {
+          parts.push(box(`sl${i}`, [w, 0.02, d / 4], [0, seatY + 0.02, -d / 4 + (d / 4) * i], c));
+        }
+        parts.push(box('back', [w, 0.5, 0.05], [0, seatY + 0.3, -d / 2 + 0.03], a));
+      }
+      for (const sx2 of [-1, 1]) {
+        for (const sz2 of [-1, 1]) {
+          parts.push(box(`lg${sx2}${sz2}`, [0.05, seatY, 0.05], [sx2 * (w / 2 - 0.06), seatY / 2, sz2 * (d / 2 - 0.06)], '#4a4f57'));
+        }
+      }
+      if (sp.pad) parts.push(box('pad2', [w - 0.14, 0.05, d - 0.12], [0, seatY + 0.08, 0], a));
+      break;
+    }
+    case 'step': {
+      const tiers = sp.tiers ?? 2;
+      const th = h / tiers;
+      for (let i = 0; i < tiers; i++) {
+        parts.push(box(`st${i}`, [w - i * 0.06, th, d - i * 0.06], [0, th * (i + 0.5), sp.tilted ? i * 0.05 : 0], i % 2 ? c : a, sp.tilted ? [-0.25, 0, 0] : undefined));
+      }
+      break;
+    }
+    case 'post': {
+      parts.push(cyl('base', [w / 2, w / 2, 0.04, 16], [0, 0.02, 0], '#4a4f57'));
+      parts.push(cyl('pole', [0.028, 0.028, h - 0.04, 12], [0, h / 2, 0], c));
+      if (sp.bag) {
+        parts.push(cyl('bag', [w / 2, w / 2 * 0.86, h * 0.72, 16], [0, h * 0.46, 0], c));
+        parts.push(cyl('chain', [0.008, 0.008, h * 0.22, 6], [0, h * 0.9, 0], '#8a8f99'));
+      }
+      if (sp.arms) {
+        for (let i = 0; i < sp.arms; i++) {
+          const ang = (i / sp.arms) * Math.PI * 2;
+          parts.push(box(`arm${i}`, [0.26, 0.025, 0.025], [(Math.cos(ang) * 0.13), h * 0.88, Math.sin(ang) * 0.13], a, [0, -ang, 0.3]));
+          parts.push(sph(`hk${i}`, 0.025, [Math.cos(ang) * 0.24, h * 0.95, Math.sin(ang) * 0.24], '#c9a227'));
+        }
+      }
+      if (sp.plates) {
+        for (let i = 0; i < 5; i++) {
+          parts.push(cyl(`pl${i}`, [0.17, 0.17, 0.03, 16], [0, 0.14 + i * 0.19, 0], i % 2 ? '#2f3646' : '#c46a4a', [0, 0, Math.PI / 2]));
+        }
+      }
+      if (sp.roof) {
+        parts.push(box('bd', [w, h * 0.45, d], [0, h * 0.45, 0], c));
+        parts.push(cyl('roof', [w * 0.72, w * 0.72, 0.1, 4], [0, h * 0.75, 0], a, [0, Math.PI / 4, 0]));
+        parts.push(cyl('perch', [0.012, 0.012, 0.16, 8], [0, h * 0.28, d / 2 + 0.07], '#8a6b45', [Math.PI / 2, 0, 0]));
+      }
+      if (sp.canopy) {
+        parts.push(cyl('hub', [0.05, 0.05, h - 0.2, 10], [0, (h - 0.2) / 2, 0], c));
+        parts.push(cyl('top', [w / 2, 0.02, 0.1, 8], [0, h - 0.08, 0], a));
+      }
+      break;
+    }
+    case 'bellrow': {
+      const bells = sp.bells ?? 4;
+      parts.push(box('mat', [w, 0.03, d], [0, 0.015, 0], '#2f3646'));
+      for (let i = 0; i < bells; i++) {
+        const x = -w / 2 + (w / bells) * (i + 0.5);
+        const r = 0.09 - i * 0.012;
+        parts.push(cyl(`bl${i}`, [r, r, r * 1.1, 14], [x, r * 0.55 + 0.03, 0], i % 2 ? c : a));
+        parts.push(cyl(`hd${i}`, [0.02, 0.02, 0.05, 8], [x, r * 1.2 + 0.03, 0], '#3d405b'));
+      }
+      break;
+    }
+    // ------------------------------------------------------------ appliances
+    case 'appliance': {
+      const units = sp.stack ?? 1;
+      const uh = h / units;
+      for (let u = 0; u < units; u++) {
+        const y0 = u * uh;
+        parts.push(box(`bd${u}`, [w, uh - 0.015, d], [0, y0 + uh / 2, 0], c));
+        parts.push(cyl(`dr${u}`, [Math.min(w, uh) * 0.32, Math.min(w, uh) * 0.32, 0.03, 20], [0, y0 + uh / 2, d / 2 + 0.015], '#2f3646', [Math.PI / 2, 0, 0]));
+        parts.push(cyl(`gl${u}`, [Math.min(w, uh) * 0.24, Math.min(w, uh) * 0.24, 0.02, 20], [0, y0 + uh / 2, d / 2 + 0.03], '#8fa6b8', [Math.PI / 2, 0, 0], true));
+        parts.push(box(`pn${u}`, [w * 0.6, 0.05, 0.015], [0, y0 + uh - 0.06, d / 2 + 0.014], a));
+        for (let k = 0; k < 3; k++) {
+          parts.push(cyl(`bt${u}${k}`, [0.018, 0.018, 0.015, 10], [-w * 0.22 + k * 0.05, y0 + uh - 0.06, d / 2 + 0.026], '#3d405b', [Math.PI / 2, 0, 0]));
+        }
+      }
+      if (sp.vent) parts.push(box('vent', [w * 0.5, 0.08, 0.02], [0, h - 0.07, -d / 2 - 0.01], '#8a8f99'));
+      break;
+    }
+    case 'machine': {
+      parts.push(box('base', [w, 0.07, d], [0, 0.035, 0], '#2f3646'));
+      if (sp.belt) {
+        parts.push(box('deck', [w * 0.62, 0.06, d * 0.86], [0, 0.09, -d * 0.05], '#3d405b'));
+        parts.push(box('belt', [w * 0.5, 0.02, d * 0.8], [0, 0.13, -d * 0.05], '#1f2933'));
+        for (const sx2 of [-1, 1]) {
+          parts.push(box(`up${sx2}`, [0.06, h - 0.1, 0.06], [sx2 * (w / 2 - 0.06), (h - 0.1) / 2 + 0.06, d / 2 - 0.08], c));
+        }
+        parts.push(box('con', [w * 0.8, 0.24, 0.06], [0, h - 0.16, d / 2 - 0.1], a, [-0.3, 0, 0]));
+        parts.push(box('scr', [w * 0.6, 0.14, 0.02], [0, h - 0.17, d / 2 - 0.14], '#8fd6e8'));
+      } else if (sp.flywheel) {
+        parts.push(cyl('fw', [0.24, 0.24, 0.1, 20], [0, 0.32, -d * 0.1], a, [Math.PI / 2, 0, 0]));
+        parts.push(cyl('seat', [0.16, 0.16, 0.06, 16], [0, 0.72, -d * 0.3], '#2f3646'));
+        parts.push(box('stem', [0.07, 0.4, 0.07], [0, 0.5, -d * 0.3], c));
+        parts.push(box('bar', [0.5, 0.04, 0.04], [0, h * 0.62, d / 2 - 0.2], a));
+        parts.push(box('con', [w * 0.7, 0.18, 0.05], [0, h - 0.14, d / 2 - 0.16], c));
+      } else {
+        parts.push(box('rail', [w * 0.5, 0.07, d * 0.88], [0, 0.2, 0], c));
+        parts.push(box('seat', [0.28, 0.06, 0.24], [0, 0.34, d * 0.32], '#2f3646'));
+        parts.push(box('leg2', [0.05, 0.3, d * 0.8], [-w * 0.2, 0.13, 0], a));
+        parts.push(box('leg3', [0.05, 0.3, d * 0.8], [w * 0.2, 0.13, 0], a));
+        parts.push(cyl('fly', [0.16, 0.16, 0.05, 16], [0, 0.28, -d * 0.38], '#2f3646', [Math.PI / 2, 0, 0]));
+      }
+      break;
+    }
+    case 'boardiron': {
+      parts.push(box('bd', [w, 0.035, d], [0, h - 0.02, 0], c, [0.04, 0, 0]));
+      if (sp.legs) {
+        for (const sx2 of [-1, 1]) {
+          for (const sz2 of [-1, 1]) {
+            parts.push(box(`lg${sx2}${sz2}`, [0.035, h - 0.05, 0.035], [sx2 * (w / 2 - 0.14), (h - 0.05) / 2, sz2 * (d / 2 - 0.1)], a, [sz2 * 0.16, 0, sx2 * 0.16]));
+          }
+        }
+        parts.push(box('bar', [w - 0.24, 0.03, 0.03], [0, 0.1, 0], a));
+      }
+      break;
+    }
+    // ---------------------------------------------------------------- beds
+    case 'crib': {
+      const railH = sp.hood ? h * 0.62 : h;
+      const mh = sp.hood ? 0.1 : h * 0.28;
+      parts.push(box('mat', [w - 0.12, mh, d - 0.12], [0, mh / 2 + 0.18, 0], '#e8e3d9', undefined, 0.9));
+      parts.push(box('base', [w, 0.16, d], [0, 0.1, 0], c));
+      for (const sy of [0.18, railH]) {
+        for (const sz2 of [-1, 1]) {
+          parts.push(box(`rl${sy}${sz2}`, [w, 0.05, 0.05], [0, sy, sz2 * (d / 2 - 0.03)], a));
+        }
+        for (const sx2 of [-1, 1]) {
+          parts.push(box(`rl2${sy}${sx2}`, [0.05, 0.05, d], [sx2 * (w / 2 - 0.03), sy, 0], a));
+        }
+      }
+      const slats = sp.slats ?? 10;
+      for (let i = 0; i < slats; i++) {
+        for (const sz2 of [-1, 1]) {
+          const x = -w / 2 + 0.1 + ((w - 0.2) / (slats - 1)) * i;
+          parts.push(box(`sl${i}${sz2}`, [0.03, railH - 0.22, 0.03], [x, 0.18 + (railH - 0.22) / 2, sz2 * (d / 2 - 0.03)], c));
+        }
+      }
+      for (const sx2 of [-1, 1]) {
+        const x = sx2 * (w / 2 - 0.03);
+        for (let i = 0; i < 5; i++) {
+          parts.push(box(`es${sx2}${i}`, [0.03, railH - 0.22, 0.03], [x, 0.18 + (railH - 0.22) / 2, -d / 2 + 0.08 + ((d - 0.16) / 4) * i], c));
+        }
+      }
+      if (sp.hood) {
+        // Half-dome canopy over the bassinet — a real cylinder segment, so it
+        // needs the geometry args rather than the cyl() shorthand.
+        parts.push(
+          <mesh key="hood" position={[0, railH, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[d * 0.5, d * 0.5, 0.4, 16, 1, false, 0, Math.PI]} />
+            <meshStandardMaterial color="#e8e3d9" side={2} roughness={0.85} />
+          </mesh>,
+        );
+        parts.push(box('hbase', [w, 0.04, d], [0, railH + 0.02, 0], a));
+      }
+      if (sp.wheels) {
+        for (const sx2 of [-1, 1]) {
+          for (const sz2 of [-1, 1]) {
+            parts.push(cyl(`wh${sx2}${sz2}`, [0.035, 0.035, 0.025, 8], [sx2 * (w / 2 - 0.1), 0.035, sz2 * (d / 2 - 0.1)], '#3d405b', [Math.PI / 2, 0, 0]));
+          }
+        }
+      }
+      break;
+    }
+    case 'bunk': {
+      const lower = 0.42;
+      const upper = h - 0.42;
+      for (const sx2 of [-1, 1]) {
+        for (const sz2 of [-1, 1]) {
+          parts.push(box(`post${sx2}${sz2}`, [0.07, h, 0.07], [sx2 * (w / 2 - 0.04), h / 2, sz2 * (d / 2 - 0.04)], c));
+        }
+      }
+      for (const [y, tag] of [[lower, 'lo'], [upper, 'up']] as [number, string][]) {
+        parts.push(box(`mat${tag}`, [w - 0.16, 0.14, d - 0.16], [0, y, 0], '#e8e3d9', undefined, 0.9));
+        parts.push(box(`frame${tag}`, [w - 0.1, 0.08, d - 0.1], [0, y - 0.11, 0], a));
+        for (const sz2 of [-1, 1]) {
+          parts.push(box(`gr${tag}${sz2}`, [w - 0.16, 0.3, 0.04], [0, y + 0.16, sz2 * (d / 2 - 0.05)], c));
+        }
+      }
+      for (let i = 1; i <= 4; i++) {
+        parts.push(box(`lad${i}`, [0.04, 0.03, 0.3], [w / 2 - 0.16, 0.2 + i * ((h - 0.3) / 4.4), -d / 2 + 0.2], a));
+      }
+      break;
+    }
+    case 'horse': {
+      parts.push(box('bd', [w * 0.8, 0.16, d], [0, h * 0.62, 0], c));
+      parts.push(box('neck', [0.2, 0.34, d * 0.7], [w * 0.3, h * 0.78, 0], c, [0, 0, -0.5]));
+      parts.push(box('hd', [0.24, 0.16, 0.14], [w * 0.42, h * 0.9, 0], a, [0, 0, -0.2]));
+      for (const sx2 of [-1, 1]) {
+        parts.push(cyl(`leg${sx2}a`, [0.02, 0.02, h * 0.5, 8], [sx2 * w * 0.24, h * 0.34, 0], c));
+        parts.push(cyl(`leg${sx2}b`, [0.02, 0.02, h * 0.5, 8], [sx2 * w * 0.24, h * 0.34, 0], c, [Math.PI / 2.4, 0, 0]));
+      }
+      break;
+    }
+    // -------------------------------------------------------------- seating
+    case 'chair': {
+      const sh = sp.tall ? h * 0.5 : 0.42;
+      parts.push(box('seat', [w, 0.1, d], [0, sh, 0], c, undefined, 0.85));
+      const bh = sp.tall ? h - sh - 0.12 : 0.48;
+      parts.push(box('back', [w, bh, 0.08], [0, sh + bh / 2 + 0.05, -d / 2 + 0.04], c, undefined, 0.85));
+      if (sp.glider) {
+        parts.push(box('rock', [w * 0.8, 0.06, 0.5], [0, sh - 0.14, 0], a, [0.08, 0, 0]));
+        for (const sx2 of [-1, 1]) {
+          parts.push(cyl(`rk${sx2}`, [0.025, 0.025, sh, 8], [sx2 * (w / 2 - 0.12), sh / 2, 0], a));
+        }
+      } else if (sp.wheels) {
+        parts.push(cyl('stem', [0.04, 0.04, sh - 0.1, 10], [0, sh / 2 - 0.05, 0], '#3d405b'));
+        for (let i = 0; i < 5; i++) {
+          const ang = (i / 5) * Math.PI * 2;
+          parts.push(box(`sp${i}`, [0.03, 0.03, w * 0.42], [0, 0.05, 0], '#3d405b', [0, ang, 0]));
+          parts.push(cyl(`wh${i}`, [0.03, 0.03, 0.02, 8], [Math.sin(ang) * w * 0.21, 0.03, Math.cos(ang) * w * 0.21], '#1f2933', [Math.PI / 2, 0, 0]));
+        }
+      } else {
+        for (const sx2 of [-1, 1]) {
+          for (const sz2 of [-1, 1]) {
+            parts.push(box(`lg${sx2}${sz2}`, [0.045, sh - 0.05, 0.045], [sx2 * (w / 2 - 0.06), (sh - 0.05) / 2, sz2 * (d / 2 - 0.06)], '#4a4f57'));
+          }
+        }
+      }
+      parts.push(box('cush', [w - 0.08, 0.05, d - 0.08], [0, sh + 0.07, 0], a, undefined, 0.9));
+      break;
+    }
+    case 'sofa': {
+      const sh = 0.4;
+      parts.push(box('seat', [w, 0.16, d], [0, sh, 0], c, undefined, 0.9));
+      parts.push(box('back', [w, 0.5, 0.14], [0, sh + 0.28, -d / 2 + 0.07], c, undefined, 0.9));
+      for (const sx2 of [-1, 1]) {
+        parts.push(box(`arm${sx2}`, [0.14, 0.34, d], [sx2 * (w / 2 - 0.07), sh + 0.06, 0], a, undefined, 0.9));
+      }
+      const n = Math.max(2, Math.round(w / 0.75));
+      for (let i = 0; i < n; i++) {
+        parts.push(box(`cush${i}`, [w / n - 0.04, 0.12, d - 0.2], [-w / 2 + (w / n) * (i + 0.5), sh + 0.14, 0.04], i % 2 ? c : a, undefined, 0.92));
+        parts.push(box(`pil${i}`, [w / n - 0.1, 0.3, 0.1], [-w / 2 + (w / n) * (i + 0.5), sh + 0.36, -d / 2 + 0.2], i % 2 ? a : c, undefined, 0.92));
+      }
+      for (const sx2 of [-1, 1]) {
+        for (const sz2 of [-1, 1]) {
+          parts.push(box(`lg${sx2}${sz2}`, [0.05, sh - 0.08, 0.05], [sx2 * (w / 2 - 0.08), (sh - 0.08) / 2, sz2 * (d / 2 - 0.08)], '#4a4f57'));
+        }
+      }
+      break;
+    }
+    case 'swing': {
+      for (const sx2 of [-1, 1]) {
+        for (const sz2 of [-1, 1]) {
+          parts.push(box(`post${sx2}${sz2}`, [0.08, h, 0.08], [sx2 * (w / 2 - 0.05), h / 2, sz2 * (d / 2 - 0.05)], c));
+        }
+        parts.push(box(`beam${sx2}`, [0.08, 0.1, d], [sx2 * (w / 2 - 0.05), h - 0.05, 0], a));
+      }
+      const sy = h * 0.42;
+      parts.push(box('seat', [w - 0.24, 0.08, d * 0.6], [0, sy, 0], a));
+      parts.push(box('bk', [w - 0.24, 0.5, 0.06], [0, sy + 0.3, -d * 0.28], a));
+      if (sp.chains) {
+        for (const sx2 of [-1, 1]) {
+          for (const sz2 of [-1, 1]) {
+            parts.push(cyl(`ch${sx2}${sz2}`, [0.008, 0.008, h - sy, 6], [sx2 * (w / 2 - 0.16), sy + (h - sy) / 2, sz2 * d * 0.22], '#8a8f99'));
+          }
+        }
+      }
+      break;
+    }
+    case 'ladder': {
+      const rails = sp.rails ?? 2;
+      for (let i = 0; i < rails; i++) {
+        const x = rails === 1 ? 0 : -w / 2 + (w / (rails - 1)) * i;
+        parts.push(box(`rl${i}`, [0.05, h, 0.05], [x, h / 2, -d / 4], c, [-0.12, 0, 0]));
+        parts.push(box(`rl2${i}`, [0.05, h, 0.05], [x, h / 2, d / 4], c, [0.12, 0, 0]));
+      }
+      const steps = Math.round(h / 0.3);
+      for (let i = 1; i < steps; i++) {
+        parts.push(box(`st${i}`, [w - 0.06, 0.035, d * 0.6], [0, i * (h / steps), 0], a));
+      }
+      for (let i = 0; i < rails; i++) {
+        const x = rails === 1 ? 0 : -w / 2 + (w / (rails - 1)) * i;
+        for (const sz2 of [-1, 1]) {
+          parts.push(cyl(`wh${i}${sz2}`, [0.035, 0.035, 0.025, 8], [x + sz2 * 0.03, 0.035, d / 4 - 0.08], '#3d405b', [Math.PI / 2, 0, 0]));
+        }
+      }
+      break;
+    }
+    // ------------------------------------------------------------ containers
+    case 'jar': {
+      const r = w / 2;
+      if (sp.ball) {
+        parts.push(sph('ball', r, [0, r, 0], c));
+        parts.push(cyl('band', [r * 1.01, r * 1.01, 0.04, 18], [0, r, 0], a));
+      } else if (sp.roller) {
+        parts.push(cyl('roll', [r, r, d * 0.9, 16], [0, r, 0], c, [Math.PI / 2, 0, 0]));
+        parts.push(cyl('core', [r * 0.35, r * 0.35, d * 0.94, 10], [0, r, 0], a, [Math.PI / 2, 0, 0]));
+      } else if (sp.disc) {
+        parts.push(cyl('disc', [r, r, 0.03, 20], [0, 0.015, 0], c));
+        parts.push(cyl('rim', [r, r, 0.05, 20], [0, 0.025, 0], a, undefined, true));
+        if (sp.handles) {
+          for (const sx2 of [-1, 1]) {
+            parts.push(box(`hd${sx2}`, [0.05, 0.02, 0.05], [sx2 * r, 0.05, 0], a));
+          }
+        }
+      } else if (sp.bowl) {
+        parts.push(cyl('bowl', [r, r * 0.6, h, 20], [0, h / 2, 0], c, undefined, true));
+        parts.push(cyl('ash', [r * 0.8, r * 0.8, 0.02, 16], [0, 0.02, 0], '#2f2a24'));
+        for (let i = 0; i < 5; i++) {
+          parts.push(cyl(`lg${i}`, [0.03, 0.03, 0.26, 6], [Math.cos(i * 1.3) * r * 0.4, 0.14, Math.sin(i * 1.3) * r * 0.4], '#6b4226', [0.4, i, 0.3]));
+        }
+      } else if (sp.spout) {
+        parts.push(cyl('body', [r * 0.8, r * 0.8, h * 0.7, 14], [0, h * 0.35, 0], c));
+        parts.push(cyl('spout', [0.02, 0.035, h * 0.7, 8], [r * 0.9, h * 0.85, 0], a, [0, 0, -0.7]));
+        parts.push(cyl('top', [r * 0.85, r * 0.85, 0.03, 14], [0, h * 0.7, 0], a));
+      } else {
+        parts.push(cyl('body', [r, r * 0.94, h, sp.open ? 16 : 18], [0, h / 2, 0], c, undefined, sp.open));
+        if (sp.lid) parts.push(cyl('lid', [r * 1.04, r * 1.04, 0.035, 18], [0, h + 0.015, 0], a));
+        if (sp.knobs) for (let i = 0; i < 2; i++) parts.push(cyl(`kn${i}`, [0.015, 0.015, 0.02, 8], [-0.03 + i * 0.06, h * 0.6, r * 0.9], a, [Math.PI / 2, 0, 0]));
+        if (sp.vent) for (let i = 0; i < 6; i++) parts.push(box(`vt${i}`, [r * 0.8, 0.012, 0.012], [0, h * 0.45, -r * 0.2 + i * (r * 0.08)], '#8a8f99'));
+        if (sp.utensils) {
+          for (let i = 0; i < 4; i++) {
+            parts.push(cyl(`ut${i}`, [0.01, 0.01, h * 0.7, 6], [-0.04 + i * 0.027, h * 0.9, 0], i % 2 ? '#8a8f99' : '#b08968', [0.05 * i, 0, 0.06 * (i - 1.5)]));
+          }
+        }
+        if (sp.pegs) {
+          for (let i = 0; i < 5; i++) {
+            parts.push(box(`pg${i}`, [0.012, 0.07, 0.012], [-0.04 + i * 0.02, h * 0.95, 0], '#c9a97a', [0, 0, 0.1 * (i - 2)]));
+          }
+        }
+      }
+      break;
+    }
+    case 'jarset': {
+      const n = sp.jars ?? 3;
+      for (let i = 0; i < n; i++) {
+        const x = -w / 2 + (w / n) * (i + 0.5);
+        const jh = h * (0.8 + (i % 2) * 0.2);
+        parts.push(cyl(`j${i}`, [w / n / 2.4, w / n / 2.4, jh, 12], [x, jh / 2, 0], i % 2 ? c : a));
+        parts.push(cyl(`l${i}`, [w / n / 2.1, w / n / 2.1, 0.03, 12], [x, jh + 0.012, 0], '#3d405b'));
+      }
+      break;
+    }
+    case 'bin': {
+      if (sp.woven) {
+        parts.push(cyl('bask', [w / 2, w / 2 * 0.8, h, 16], [0, h / 2, 0], c, undefined, true));
+        parts.push(cyl('rim', [w / 2, w / 2, 0.04, 16], [0, h, 0], a, undefined, true));
+        parts.push(cyl('hnd', [w * 0.3, w * 0.3, 0.03, 12], [0, h + 0.04, 0], a, undefined, true));
+      } else if (sp.slats) {
+        parts.push(box('bd', [w, h * 0.3, d], [0, h * 0.15, 0], c));
+        for (let i = 0; i < 3; i++) {
+          parts.push(box(`sl${i}`, [w + 0.02, 0.05, 0.05], [0, h * 0.45 + i * (h * 0.26), d / 2 - 0.03], a));
+          parts.push(box(`sl2${i}`, [w + 0.02, 0.05, 0.05], [0, h * 0.45 + i * (h * 0.26), -d / 2 + 0.03], a));
+        }
+        for (const sx2 of [-1, 1]) {
+          parts.push(box(`cn${sx2}`, [0.06, h, 0.06], [sx2 * (w / 2 - 0.03), h / 2, (d / 2 - 0.03) * sx2], c));
+        }
+        if (sp.plants) {
+          for (let i = 0; i < 5; i++) {
+            parts.push(sph(`lf${i}`, 0.1, [-w / 2 + 0.15 + (w - 0.3) * (i / 4), h + 0.12, 0], i % 2 ? '#4f7a4a' : '#3f6b3f', [1, 0.8, 1]));
+          }
+        }
+      } else {
+        parts.push(box('bd', [w, h, d], [0, h / 2, 0], c, undefined, sp.soft ? 0.95 : 0.8));
+        parts.push(box('rim', [w + 0.02, 0.04, d + 0.02], [0, h, 0], a));
+        if (sp.canvas) {
+          for (const sx2 of [-1, 1]) {
+            parts.push(box(`hd${sx2}`, [0.03, h * 0.5, 0.03], [sx2 * (w / 2 - 0.04), h * 0.75, 0], a, [0, 0, sx2 * 0.4]));
+          }
+        }
+        if (sp.bands) {
+          for (let i = 0; i < sp.bands; i++) {
+            parts.push(box(`bd${i}`, [w + 0.015, 0.06, d + 0.015], [0, (h / (sp.bands + 1)) * (i + 1), 0], a));
+          }
+        }
+        if (sp.soft) {
+          for (let i = 0; i < 4; i++) {
+            parts.push(sph(`ty${i}`, 0.09, [-w / 3 + (w / 3) * i, h + 0.04, (i % 2 ? 0.06 : -0.06)], ['#c46a4a', '#d9a441', '#5f8f7f', '#a58a9c'][i], [1, 0.8, 1]));
+          }
+        }
+      }
+      break;
+    }
+    case 'ladderbin':
+      break;
+    // ------------------------------------------------------------- flat goods
+    case 'mat': {
+      const th = Math.max(h, 0.012);
+      parts.push(box('mat', [w, th, d], [0, th / 2, 0], c, undefined, 0.95));
+      parts.push(box('edge', [w - 0.06, th, d - 0.06], [0, th / 2 + 0.001, 0], a, undefined, 0.95));
+      if (sp.stripes) {
+        for (let i = 0; i < 4; i++) {
+          parts.push(box(`st${i}`, [0.08, th, d - 0.08], [-w / 2 + 0.2 + i * ((w - 0.4) / 3), th / 2 + 0.002, 0], a, undefined, 0.95));
+        }
+      }
+      if (sp.coir) {
+        for (let i = 0; i < 5; i++) {
+          parts.push(box(`cr${i}`, [w - 0.1, th, 0.03], [0, th / 2 + 0.002, -d / 2 + 0.1 + i * ((d - 0.2) / 4)], a, undefined, 0.98));
+        }
+      }
+      break;
+    }
+    // ------------------------------------------------------------- wall goods
+    case 'wallflat': {
+      const zf = back - 0.015;
+      if (sp.mirror) {
+        parts.push(box('mir', [w, h, 0.02], [0, sp.tall ? h / 2 : 0, zf], '#cfe0e6', undefined, 0.12));
+        parts.push(box('frm', [w + 0.05, h + 0.05, 0.03], [0, sp.tall ? h / 2 : 0, zf + 0.015], a));
+        parts.push(box('frm2', [w - 0.03, h - 0.03, 0.01], [0, sp.tall ? h / 2 : 0, zf - 0.005], '#dbe7ec', undefined, 0.1));
+      } else if (sp.stars) {
+        for (let i = 0; i < sp.stars; i++) {
+          const x = -w / 2 + 0.1 + ((w - 0.2) / (sp.stars - 1)) * i;
+          const y = ((i % 3) - 1) * (h / 3.4);
+          parts.push(sph(`st${i}`, 0.05, [x, y, zf], '#fff6cf', [1, 1, 0.35], '#ffe9a8'));
+        }
+      } else if (sp.flags) {
+        parts.push(cyl('cord', [0.006, 0.006, w, 6], [0, h * 0.5, zf], '#c9a97a', [0, 0, Math.PI / 2]));
+        for (let i = 0; i < sp.flags; i++) {
+          const x = -w / 2 + (w / sp.flags) * (i + 0.5);
+          parts.push(box(`fl${i}`, [0.09, 0.12, 0.01], [x, h * 0.38, zf], ['#c46a4a', '#d9a441', '#5f8f7f', '#7d9cc0'][i % 4]));
+        }
+      } else if (sp.hooks) {
+        parts.push(box('bar', [w, 0.05, 0.025], [0, 0, zf], a));
+        for (let i = 0; i < sp.hooks; i++) {
+          const x = -w / 2 + (w / (sp.hooks + 1)) * (i + 1);
+          parts.push(cyl(`hk${i}`, [0.008, 0.008, 0.07, 6], [x, -0.04, zf - 0.035], '#8a8f99', [Math.PI / 2, 0, 0]));
+          parts.push(sph(`tip${i}`, 0.016, [x, -0.075, zf - 0.035], '#c9a227'));
+        }
+      } else if (sp.slats) {
+        for (const sx2 of [-1, 1]) {
+          parts.push(box(`sd${sx2}`, [0.05, h, 0.03], [sx2 * (w / 2 - 0.03), 0, zf], c));
+        }
+        for (let i = 0; i < 6; i++) {
+          parts.push(box(`sl${i}`, [w - 0.08, 0.025, 0.02], [0, -h / 2 + 0.1 + i * ((h - 0.2) / 5), zf], a));
+        }
+        for (let i = 0; i < 4; i++) {
+          parts.push(sph(`lv${i}`, 0.09, [-w / 3 + (w / 3) * i, h * 0.3, zf - 0.05], '#4f7a4a', [1, 0.7, 0.6]));
+        }
+      } else if (sp.drum) {
+        parts.push(box('brk', [0.06, 0.06, 0.2], [0, 0, zf - 0.1], '#4b5563'));
+        parts.push(cyl('drum', [0.18, 0.18, 0.16, 16], [0, 0, zf - 0.16], a, [0, 0, Math.PI / 2]));
+        for (let i = 0; i < 4; i++) {
+          parts.push(cyl(`co${i}`, [0.19, 0.19, 0.03, 16], [-0.06 + i * 0.04, 0, zf - 0.16], '#2f6f5e', [0, 0, Math.PI / 2], true));
+        }
+      } else if (sp.tiles) {
+        parts.push(box('bd', [w, h, 0.02], [0, 0, zf], '#e8e3d9', undefined, 0.35));
+        const cols = Math.max(2, Math.round(w / 0.15));
+        const rows = Math.max(2, Math.round(h / 0.15));
+        for (let r = 0; r < rows; r++) {
+          for (let cIdx = 0; cIdx < cols; cIdx++) {
+            const x = -w / 2 + (w / cols) * (cIdx + 0.5);
+            const y = -h / 2 + (h / rows) * (r + 0.5);
+            parts.push(
+              <mesh key={`t${r}${cIdx}`} position={[x, y, zf - 0.014]}>
+                <boxGeometry args={[w / cols - 0.012, h / rows - 0.012, 0.008]} />
+                <Mat color={(r + cIdx) % 3 === 0 ? a : '#f2efe9'} rough={0.3} />
+              </mesh>,
+            );
+          }
+        }
+      } else if (sp.boxy) {
+        parts.push(box('bx', [w, h, d], [0, 0, zf - d / 2], c));
+        parts.push(cyl('flag', [0.012, 0.012, 0.07, 6], [w * 0.2, h * 0.75, zf - 0.06], '#c46a4a'));
+      } else if (sp.arm) {
+        parts.push(box('pl', [0.06, 0.08, 0.02], [0, 0, zf], a));
+        parts.push(box('arm', [0.025, 0.025, 0.12], [0, 0.03, zf - 0.06], a));
+        parts.push(cyl('hd', [0.045, 0.045, 0.06, 10], [0, 0.06, zf - 0.11], c, [1.2, 0, 0]));
+        parts.push(glowBox('glow', [0.07, 0.01, 0.04], [0, 0.03, zf - 0.12], '#ffe9a8', 1.4));
+      } else if (sp.dome) {
+        parts.push(box('pl', [w * 0.7, h * 0.5, 0.04], [0, 0, zf], c));
+        parts.push(cyl('dome2', [w * 0.32, w * 0.32, 0.07, 14], [0, 0, zf - 0.05], '#3d405b', [Math.PI / 2, 0, 0]));
+        for (let i = 0; i < 6; i++) {
+          const ang = (i / 6) * Math.PI * 2;
+          parts.push(glowSphere(`st${i}`, 0.016, [Math.cos(ang) * w * 0.5, Math.sin(ang) * h * 0.6, zf - 0.12], '#cfe3ff'));
+        }
+      } else if (sp.strip) {
+        parts.push(box('st', [w, h, 0.02], [0, 0, zf], '#d9d2c5'));
+        parts.push(glowBox('lit', [w * 0.92, h * 0.5, 0.01], [0, 0, zf - 0.012], '#fff3d6', 1.6));
+        if (sp.lit) parts.push(<pointLight key="pl" position={[0, -0.1, zf - 0.3]} intensity={0.3} distance={2.4} color="#ffe9bd" castShadow={false} />);
+      } else {
+        // chalkboard / whiteboard / pin board: a framed panel with a writing face
+        parts.push(box('pan', [w, h, 0.02], [0, 0, zf], sp.chalk ? '#2f3436' : '#e8e6e0', undefined, sp.chalk ? 0.95 : 0.6));
+        parts.push(box('frm', [w + 0.04, h + 0.04, 0.03], [0, 0, zf + 0.012], a));
+        if (sp.chalk) {
+          for (let i = 0; i < 4; i++) {
+            parts.push(box(`ln${i}`, [w * (0.5 + (i % 2) * 0.2), 0.015, 0.006], [-w * 0.1, h * 0.3 - i * (h * 0.16), zf - 0.012], '#e8e6e0'));
+          }
+        }
+        if (sp.notes) {
+          for (let i = 0; i < 5; i++) {
+            const x = -w / 2 + 0.12 + ((w - 0.24) / 4) * i;
+            const y = ((i % 3) - 1) * (h / 3.6);
+            parts.push(box(`nt${i}`, [0.11, 0.13, 0.006], [x, y, zf - 0.012], ['#fff3d6', '#d9e2ec', '#fff3d6', '#e6d5c4', '#d9e2ec'][i], [0, 0, 0.06 * (i - 2)]));
+          }
+        }
+        if (sp.bulbs) parts.push(glowBox('nl', [w * 0.8, h * 0.6, 0.01], [0, 0, zf - 0.012], '#ffe9a8', 1.5));
+      }
+      break;
+    }
+    // --------------------------------------------------------- ceiling drops
+    case 'drop': {
+      const cordH = Math.max(h - 0.1, 0.05);
+      parts.push(cyl('cord', [0.005, 0.005, cordH, 6], [0, cordH / 2 + 0.02, 0], '#8a8f99'));
+      if (sp.canopy) {
+        const cr = w / 2;
+        parts.push(cyl('hub', [0.06, 0.06, 0.05, 12], [0, cordH + 0.04, 0], a));
+        parts.push(cyl('can', [cr, cr * 0.25, 0.5, 16], [0, cordH - 0.22, 0], c, undefined, true));
+        for (let i = 0; i < 5; i++) {
+          const ang = (i / 5) * Math.PI * 2;
+          parts.push(sph(`flu${i}`, 0.09, [Math.cos(ang) * cr * 0.8, cordH - 0.42, Math.sin(ang) * cr * 0.8], '#e8e3d9', [1, 0.5, 1]));
+        }
+      } else if (sp.globe) {
+        const r = w / 2;
+        parts.push(cyl('cap', [r * 0.4, r * 0.4, 0.05, 12], [0, cordH, 0], a));
+        parts.push(sph('gl', r, [0, cordH - r - 0.05, 0], sp.lit ? '#ffe6b0' : c, [1, 1.25, 1], sp.lit ? '#ffd98a' : undefined));
+        if (sp.lit) parts.push(<pointLight key="pl" position={[0, cordH - r - 0.05, 0]} intensity={0.5} distance={3} color="#ffd9a0" castShadow={false} />);
+      } else if (sp.tubes) {
+        const n = sp.tubes;
+        parts.push(cyl('topdisc', [0.07, 0.07, 0.02, 14], [0, cordH, 0], a));
+        for (let i = 0; i < n; i++) {
+          const ang = (i / n) * Math.PI;
+          const len = 0.16 + (i % 3) * 0.07;
+          parts.push(cyl(`tb${i}`, [0.012, 0.012, len, 6], [Math.sin(ang) * 0.06, cordH - len / 2 - 0.02, Math.cos(ang) * 0.06], ['#c9a227', '#b9c4c9', '#8d99ae'][i % 3]));
+        }
+        parts.push(box('sail', [0.09, 0.12, 0.01], [0.05, cordH - 0.3, 0], '#e8e3d9'));
+      } else {
+        // mobile: a hub with arms and dangling shapes
+        parts.push(cyl('hub', [0.07, 0.07, 0.05, 14], [0, cordH, 0], a));
+        const arms = sp.arms ?? 4;
+        for (let i = 0; i < arms; i++) {
+          const ang = (i / arms) * Math.PI * 2;
+          const ax = Math.cos(ang) * (w / 2) * 0.6;
+          const az = Math.sin(ang) * (w / 2) * 0.6;
+          const drop = cordH - 0.12 - (i % 2) * 0.09;
+          parts.push(box(`ar${i}`, [Math.abs(ax) || 0.02, 0.014, Math.abs(az) || 0.02], [ax / 2, cordH - 0.02, az / 2], a));
+          parts.push(cyl(`str${i}`, [0.004, 0.004, drop, 5], [ax, drop / 2 + cordH - drop / 2 - 0.02 + 0.0, az], '#b08968'));
+          if (sp.drops) {
+            parts.push(sph(`dr${i}`, 0.05, [ax, cordH - drop, az], ['#c46a4a', '#d9a441', '#5f8f7f', '#a58a9c'][i % 4]));
+          }
+        }
+      }
+      break;
+    }
+    // ---------------------------------------------------------- small objects
+    case 'small': {
+      if (sp.screen) {
+        if (sp.stand) {
+          parts.push(box('base', [w * 0.5, 0.015, d * 0.7], [0, 0.008, 0], a));
+          parts.push(box('stem', [0.05, h * 0.3, 0.04], [0, h * 0.15, -d * 0.2], a));
+          parts.push(box('scr', [w, h * 0.6, 0.02], [0, h * 0.62, -d * 0.3], '#2f3646', [-0.06, 0, 0]));
+          parts.push(glowBox('glow', [w * 0.94, h * 0.55, 0.01], [0, h * 0.62, -d * 0.3 + 0.012], '#bfe3f0', 1.2));
+        } else {
+          parts.push(box('body', [w, h, d], [0, h / 2, 0], c));
+          parts.push(box('scr', [w * 0.7, h * 0.55, 0.006], [0, h * 0.58, d / 2 + 0.004], '#2f3646'));
+          parts.push(glowBox('glow', [w * 0.62, h * 0.45, 0.004], [0, h * 0.58, d / 2 + 0.008], '#bfe3f0', 1.1));
+          parts.push(sph('led', 0.008, [w * 0.3, h * 0.2, d / 2 + 0.006], '#5f8f7f'));
+        }
+      } else if (sp.keys) {
+        parts.push(box('kb', [w, h, d], [0, h / 2, 0], c, undefined, 0.5));
+        for (let r = 0; r < 4; r++) {
+          parts.push(box(`kr${r}`, [w - 0.03, 0.004, d / 5], [0, h + 0.002, -d / 2 + 0.02 + r * (d / 5)], a));
+        }
+      } else if (sp.dome) {
+        parts.push(sph('m', w, [0, h * 0.5, 0], c, [1, h / w, 0.78]));
+        parts.push(box('btn', [0.008, 0.004, d * 0.3], [0, h * 0.92, 0], a));
+      } else if (sp.tray) {
+        parts.push(box('base', [w, h, d], [0, h / 2, 0], c, undefined, 0.6));
+        for (const sz2 of [-1, 1]) {
+          parts.push(box(`rim${sz2}`, [w, h * 0.8, 0.012], [0, h * 0.6, sz2 * (d / 2 - 0.006)], a));
+        }
+        for (const sx2 of [-1, 1]) {
+          parts.push(box(`rim2${sx2}`, [0.012, h * 0.8, d], [sx2 * (w / 2 - 0.006), h * 0.6, 0], a));
+        }
+        if (sp.bottles) {
+          for (let i = 0; i < 3; i++) {
+            parts.push(box(`bt${i}`, [w * 0.16, h * 2.2, d * 0.2], [-w * 0.28 + i * (w * 0.28), h * 1.6, 0], ['#d9c2a0', '#c9d2d9', '#e8d9c8'][i]));
+          }
+        }
+        if (sp.tissue) {
+          parts.push(box('ts', [w * 0.5, h * 1.6, 0.006], [0, h * 1.4, 0], '#fdfdfa', [0.1, 0, 0.08]));
+        }
+        if (sp.compartments) {
+          for (let i = 0; i < 3; i++) {
+            parts.push(box(`dv${i}`, [0.01, h * 0.7, d - 0.02], [-w / 3 + (w / 3) * i, h * 0.55, 0], sp.velvet ? '#7d5a7a' : a));
+          }
+        }
+      } else if (sp.hanger) {
+        parts.push(cyl('hook', [0.02, 0.02, 0.06, 8], [0, h * 0.85, 0], a, [0, 0, Math.PI / 2]));
+        parts.push(cyl('hook2', [0.008, 0.008, 0.06, 6], [0.03, h * 0.78, 0], a));
+        parts.push(box('bar2', [w, 0.022, 0.03], [0, h * 0.6, 0], sp.shaped ? '#b08968' : c, [0, 0, 0], 0.9));
+        for (const sx2 of [-1, 1]) {
+          parts.push(box(`sd${sx2}`, [0.03, 0.06, 0.03], [sx2 * (w / 2 - 0.02), h * 0.45, 0], c));
+        }
+      } else if (sp.board) {
+        parts.push(box('bd', [w, h, d], [0, h / 2, 0], '#c9a97a', undefined, 0.7));
+        parts.push(cyl('hole', [0.018, 0.018, h, 8], [w / 2 - 0.05, h / 2, 0], '#6b4226'));
+      } else if (sp.grid) {
+        parts.push(box('bd', [w, h, d], [0, h / 2, 0], '#d9d2c5', undefined, 0.85));
+        for (let i = 1; i < 4; i++) {
+          parts.push(box(`gx${i}`, [0.008, h + 0.002, d], [-w / 2 + (w / 4) * i, h / 2, 0], a));
+          parts.push(box(`gz${i}`, [w, h + 0.002, 0.008], [0, h / 2, -d / 2 + (d / 3) * i], a));
+        }
+      } else if (sp.sheet || sp.clear) {
+        parts.push(box('bd', [w, h, d], [0, h / 2, 0], sp.clear ? '#dfeef2' : '#fdfdfa', undefined, 0.35));
+        parts.push(box('lid', [w, 0.006, d], [0, h + 0.003, 0], a, undefined, 0.3));
+        if (sp.round) {
+          for (let i = 0; i < 4; i++) {
+            parts.push(cyl(`rd${i}`, [w * 0.14, w * 0.14, 0.004, 12], [-w * 0.22 + (i % 2) * w * 0.44, h + 0.006, -d * 0.2 + Math.floor(i / 2) * d * 0.4], a));
+          }
+        }
+      } else if (sp.globe) {
+        parts.push(cyl('stand', [w / 3, w / 3, 0.03, 14], [0, 0.015, 0], a));
+        parts.push(cyl('stem', [0.014, 0.014, h * 0.4, 8], [0, h * 0.2, 0], a));
+        parts.push(sph('gl', w / 2, [0, h * 0.62, 0], '#7d9cc0'));
+        parts.push(sph('gr', w / 2, [0, h * 0.62, -0.02], '#5f8f7f', [1, 1, 0.4]));
+        parts.push(cyl('ring2', [w / 2 + 0.012, w / 2 + 0.012, 0.012, 18], [0, h * 0.62, 0], '#c9a227', [Math.PI / 2, 0, 0], true));
+      } else if (sp.post) {
+        parts.push(box('bd', [w, 0.012, d], [0, 0.006, 0], a));
+        parts.push(box('stem', [0.012, h * 0.7, 0.012], [0, h * 0.4, 0], a));
+        parts.push(box('arm', [w * 0.8, 0.01, 0.01], [0, h * 0.72, 0], a));
+        for (const sx2 of [-1, 1]) {
+          parts.push(cyl(`lens${sx2}`, [w * 0.22, w * 0.22, 0.004, 12], [sx2 * w * 0.3, h * 0.72, 0], '#cfe3ff', undefined, true));
+        }
+      } else if (sp.eggs) {
+        parts.push(box('tray', [w, h * 0.5, d], [0, h * 0.25, 0], c));
+        for (let i = 0; i < 6; i++) {
+          parts.push(sph(`eg${i}`, w * 0.09, [-w * 0.32 + (i % 3) * (w * 0.32), h * 0.6, -d * 0.2 + Math.floor(i / 3) * (d * 0.4)], '#e8dcc8', [1, 1.3, 1]));
+        }
+      } else if (sp.stack) {
+        for (let i = 0; i < sp.stack; i++) {
+          parts.push(box(`tr${i}`, [w, h * 0.22, d], [0, h * 0.11 + i * h * 0.24, 0], i % 2 ? c : a));
+        }
+      } else if (sp.coil) {
+        parts.push(cyl('coil', [w / 2, w / 2, h, 14], [0, h / 2, 0], a, undefined, true));
+        parts.push(cyl('hnd', [0.02, 0.02, 0.08, 8], [w / 2, h / 2, 0], '#3d405b', [0, 0, Math.PI / 2]));
+      } else if (sp.loops) {
+        for (let i = 0; i < 3; i++) {
+          parts.push(cyl(`lp${i}`, [w / 2 - i * 0.02, w / 2 - i * 0.02, h, 14], [0, h / 2, 0], ['#c46a4a', '#5f8f7f', '#d9a441'][i], undefined, true));
+        }
+      } else if (sp.folded) {
+        parts.push(box('bd', [w, h, d], [0, h / 2, 0], '#dce3ea', undefined, 0.9));
+        parts.push(box('fold', [w, 0.008, d], [0, h + 0.004, 0], '#c3cedb'));
+      } else if (sp.wedge) {
+        parts.push(box('bd', [w, 0.02, d], [0, 0.01, 0], '#3d405b'));
+        parts.push(box('iron', [w * 0.8, h * 0.35, d * 0.8], [0, h * 0.2, 0], '#c9d2d9', [0, 0, 0.1], 0.3));
+      } else {
+        parts.push(box('body', [w, h, d], [0, h / 2, 0], c));
+      }
+      break;
+    }
+    case 'bust': {
+      parts.push(box('ped', [w * 0.7, h * 0.3, d * 0.7], [0, h * 0.15, 0], '#3d405b', undefined, 0.5));
+      parts.push(cyl('neck', [w * 0.12, w * 0.14, h * 0.12, 10], [0, h * 0.34, 0], '#e0dcd5'));
+      parts.push(sph('head', w * 0.19, [0, h * 0.52, 0], '#e0dcd5', [1, 1.2, 1]));
+      parts.push(box('sh', [w * 0.5, h * 0.2, d * 0.5], [0, h * 0.28, 0], '#e0dcd5', undefined, 0.6));
+      parts.push(sph('nose', w * 0.05, [0, h * 0.53, -w * 0.17], '#e0dcd5', [1, 1, 1.4]));
+      parts.push(box('hair', [w * 0.36, h * 0.1, d * 0.34], [0, h * 0.66, w * 0.02], '#e0dcd5', undefined, 0.6));
+      break;
+    }
+    default:
+      parts.push(box('body', [w, h, d], [0, h / 2, 0], c));
+  }
+
+  return <group>{parts}</group>;
+}
+
 export function FurnitureBody({ item }: { item: FurnItem }) {
   switch (item.type) {
     case 'seating':
@@ -2689,6 +3598,15 @@ export function FurnitureBody({ item }: { item: FurnItem }) {
       return <TowelRack f={item} />;
     case 'vamirror':
       return <VanityMirror f={item} />;
+    // The rule-driven categories share one parametric builder — see Accessory.
+    case 'nursery':
+    case 'gym':
+    case 'laundry':
+    case 'office':
+    case 'pantry':
+    case 'outdoor':
+    case 'closet':
+      return <Accessory f={item} />;
     default:
       return null;
   }

@@ -845,6 +845,800 @@ function Panel({ p }: ShapeProps) {
   );
 }
 
+// --- rule-driven categories: nursery, gym, laundry, office, pantry, outdoor,
+// closet. These cover the objects the room rules name that nothing else held,
+// so each one needed a silhouette of its own rather than a borrowed chair.
+
+function CribArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={32} />
+      <rect x={28} y={44} width={64} height={16} rx={3} fill={p.dark} />
+      <rect x={30} y={38} width={60} height={8} rx={3} fill={p.light} />
+      {/* slatted sides */}
+      {[0, 1, 2, 3, 4, 5].map((i) => (
+        <rect key={i} x={32 + i * 10} y={26} width={3.4} height={20} fill={p.main} />
+      ))}
+      <rect x={28} y={24} width={64} height={4} rx={2} fill={p.main} stroke={stroke(p)} />
+      <rect x={86} y={26} width={4} height={34} rx={2} fill={p.main} />
+      <rect x={28} y={58} width={64} height={4} rx={2} fill={p.main} />
+      <rect x={30} y={40} width={60} height={6} rx={3} fill={p.light} stroke={stroke(p)} />
+    </>
+  );
+}
+
+function BunkArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={30} />
+      {[32, 92].map((x) => (
+        <rect key={x} x={x} y={16} width={5} height={50} fill={p.main} stroke={stroke(p)} />
+      ))}
+      {[18, 50].map((y) => (
+        <g key={y}>
+          <rect x={30} y={y} width={62} height={7} rx={3} fill={p.light} stroke={stroke(p)} />
+          <rect x={30} y={y - 5} width={62} height={6} rx={3} fill={p.main} />
+        </g>
+      ))}
+      <rect x={94} y={16} width={4} height={26} fill={p.main} />
+      {[0, 1, 2, 3].map((i) => (
+        <rect key={i} x={38 + i * 14} y={34} width={3} height={18} fill={p.dark} />
+      ))}
+    </>
+  );
+}
+
+function BinArt({ p, w }: ShapeProps) {
+  const wide = Math.min(56, 36 + w * 14);
+  const x = (120 - wide) / 2;
+  return (
+    <>
+      <Shadow rx={wide / 2} />
+      <path d={`M${x} 34 L${x + wide} 34 L${x + wide - 5} 62 L${x + 5} 62 Z`} fill={p.main} stroke={stroke(p)} />
+      <rect x={x - 2} y={30} width={wide + 4} height={6} rx={3} fill={p.light} stroke={stroke(p)} />
+      <path d={`M${x + 6} 40 h${wide - 12}`} stroke={p.dark} strokeWidth={2} opacity={0.6} />
+    </>
+  );
+}
+
+function HorseArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={26} />
+      <rect x={34} y={46} width={46} height={12} rx={5} fill={p.main} stroke={stroke(p)} />
+      <path d="M74 46 l16 -14 l7 6 l-12 12 Z" fill={p.main} stroke={stroke(p)} />
+      <rect x={86} y={26} width={16} height={9} rx={4} fill={p.light} stroke={stroke(p)} />
+      <circle cx={101} cy={29} r={2} fill={p.dark} />
+      <path d="M42 58 q-6 12 -2 20" stroke={p.dark} strokeWidth={3.4} fill="none" strokeLinecap="round" />
+      <path d="M72 58 q6 12 2 20" stroke={p.dark} strokeWidth={3.4} fill="none" strokeLinecap="round" />
+      <path d="M34 50 q10 -10 22 -6" stroke={p.accent ?? p.light} strokeWidth={3} fill="none" strokeLinecap="round" />
+    </>
+  );
+}
+
+function MachineArt({ p, w }: ShapeProps) {
+  const wide = Math.min(70, 46 + w * 18);
+  const x = (120 - wide) / 2;
+  return (
+    <>
+      <Shadow rx={wide / 2} />
+      <rect x={x} y={58} width={wide} height={12} rx={4} fill={p.dark} stroke={stroke(p)} />
+      <rect x={x + 3} y={54} width={wide * 0.62} height={6} rx={3} fill={p.light} />
+      <rect x={x + wide - 14} y={24} width={11} height={34} rx={4} fill={p.main} stroke={stroke(p)} />
+      <rect x={x + wide - 16} y={16} width={15} height={12} rx={3} fill={p.light} stroke={stroke(p)} />
+      <path d={`M${x + wide - 12} 22 h9`} stroke={p.dark} strokeWidth={2} />
+      <rect x={x + 4} y={22} width={6} height={34} rx={3} fill={p.main} stroke={stroke(p)} />
+    </>
+  );
+}
+
+function RackArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={30} />
+      {[26, 90].map((x) => (
+        <rect key={x} x={x} y={18} width={6} height={48} fill={p.main} stroke={stroke(p)} />
+      ))}
+      <rect x={22} y={22} width={78} height={6} rx={3} fill={p.light} stroke={stroke(p)} />
+      <rect x={22} y={62} width={78} height={5} rx={2.5} fill={p.light} />
+      <rect x={50} y={28} width={22} height={6} rx={3} fill={p.dark} />
+    </>
+  );
+}
+
+function DumbbellArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={30} />
+      {[34, 58].map((y) => (
+        <g key={y}>
+          <rect x={26} y={y} width={68} height={4} rx={2} fill={p.light} />
+          {[0, 1, 2, 3].map((i) => (
+            <g key={i}>
+              <rect x={32 + i * 16} y={y - 6} width={10} height={4} rx={2} fill={p.main} />
+              <rect x={28 + i * 16} y={y - 8} width={5} height={8} rx={2} fill={p.dark} />
+              <rect x={41 + i * 16} y={y - 8} width={5} height={8} rx={2} fill={p.dark} />
+            </g>
+          ))}
+        </g>
+      ))}
+    </>
+  );
+}
+
+function BallArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={20} />
+      <circle cx={60} cy={48} r={22} fill={p.main} stroke={stroke(p)} />
+      <path d="M38 48 h44" stroke={p.light} strokeWidth={4} />
+      <circle cx={60} cy={48} r={22} fill="none" stroke={p.dark} strokeWidth={2} />
+    </>
+  );
+}
+
+function PunchingBagArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={18} />
+      <rect x={18} y={14} width={84} height={5} rx={2.5} fill={p.dark} />
+      <path d="M56 19 h8 v6 h-8 Z" fill={p.light} />
+      <rect x={48} y={25} width={24} height={44} rx={10} fill={p.main} stroke={stroke(p)} />
+      <rect x={48} y={44} width={24} height={4} fill={p.light} opacity={0.7} />
+    </>
+  );
+}
+
+function StepArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={26} />
+      <rect x={28} y={48} width={64} height={20} rx={3} fill={p.main} stroke={stroke(p)} />
+      <rect x={38} y={32} width={44} height={18} rx={3} fill={p.light} stroke={stroke(p)} />
+      <rect x={28} y={64} width={64} height={4} fill={p.dark} opacity={0.5} />
+    </>
+  );
+}
+
+function WasherArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={24} />
+      <rect x={36} y={22} width={48} height={48} rx={5} fill={p.main} stroke={stroke(p)} />
+      <rect x={40} y={26} width={40} height={10} rx={3} fill={p.light} />
+      <circle cx={60} cy={52} r={15} fill={p.dark} />
+      <circle cx={60} cy={52} r={10} fill="#9fb6c4" opacity={0.85} />
+      <circle cx={78} cy={30} r={2.4} fill={p.accent ?? p.dark} />
+    </>
+  );
+}
+
+function RodArt({ p, w }: ShapeProps) {
+  const wide = Math.min(84, 54 + w * 18);
+  const x = (120 - wide) / 2;
+  return (
+    <>
+      <rect x={x - 4} y={16} width={5} height={10} fill={p.main} />
+      <rect x={x + wide - 1} y={16} width={5} height={10} fill={p.main} />
+      <rect x={x} y={22} width={wide} height={4} rx={2} fill={p.light} stroke={stroke(p)} />
+      {[0, 1, 2, 3, 4].map((i) => (
+        <g key={i}>
+          <path
+            d={`M${x + 6 + i * ((wide - 12) / 4)} 26 q-3 4 0 8`}
+            stroke={p.dark}
+            strokeWidth={1.6}
+            fill="none"
+          />
+          <rect
+            x={x + 3 + i * ((wide - 12) / 4)}
+            y={34}
+            width={13}
+            height={28}
+            rx={3}
+            fill={i % 2 ? p.main : p.light}
+            stroke={stroke(p)}
+          />
+        </g>
+      ))}
+    </>
+  );
+}
+
+function IroningArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={30} />
+      <path d="M22 44 L98 30 L102 38 L26 52 Z" fill={p.main} stroke={stroke(p)} />
+      <path d="M60 40 L54 64 M60 40 L74 62" stroke={p.dark} strokeWidth={3} strokeLinecap="round" />
+      <rect x={70} y={30} width={18} height={5} rx={2.5} fill={p.light} />
+    </>
+  );
+}
+
+function JarArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={22} />
+      {[38, 60, 82].map((x, i) => (
+        <g key={x}>
+          <rect x={x - 9} y={38} width={18} height={26} rx={4} fill={i % 2 ? p.main : p.light} stroke={stroke(p)} />
+          <rect x={x - 10} y={32} width={20} height={7} rx={2.5} fill={p.dark} />
+        </g>
+      ))}
+    </>
+  );
+}
+
+function CrockArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={16} />
+      <rect x={48} y={40} width={24} height={26} rx={5} fill={p.main} stroke={stroke(p)} />
+      <rect x={46} y={36} width={28} height={6} rx={3} fill={p.light} />
+      {[54, 60, 66].map((x) => (
+        <rect key={x} x={x} y={20} width={3.4} height={18} rx={1.7} fill={p.dark} />
+      ))}
+      <circle cx={60} cy={52} r={5} fill={p.light} opacity={0.8} />
+    </>
+  );
+}
+
+function HookRailArt({ p, w }: ShapeProps) {
+  const wide = Math.min(88, 56 + w * 16);
+  const x = (120 - wide) / 2;
+  return (
+    <>
+      <rect x={x} y={34} width={wide} height={7} rx={3.5} fill={p.main} stroke={stroke(p)} />
+      {[0, 1, 2, 3].map((i) => {
+        const hx = x + 8 + i * ((wide - 16) / 3);
+        return (
+          <g key={i}>
+            <path d={`M${hx} 41 v9 q0 5 5 5`} stroke={p.dark} strokeWidth={2.4} fill="none" strokeLinecap="round" />
+            <circle cx={hx + 5} cy={55} r={2.6} fill={p.light} />
+          </g>
+        );
+      })}
+    </>
+  );
+}
+
+function ShelvingArt({ p, w }: ShapeProps) {
+  const wide = Math.min(74, 50 + w * 16);
+  const x = (120 - wide) / 2;
+  return (
+    <>
+      <Shadow rx={wide / 2} />
+      {[x, x + wide - 5].map((sx) => (
+        <rect key={sx} x={sx} y={16} width={5} height={52} fill={p.main} stroke={stroke(p)} />
+      ))}
+      {[0, 1, 2, 3].map((i) => (
+        <rect key={i} x={x} y={18 + i * 16} width={wide} height={4} rx={2} fill={p.light} />
+      ))}
+      {[0, 1, 2, 3, 4, 5].map((i) => (
+        <rect
+          key={i}
+          x={x + 5 + (i % 3) * ((wide - 14) / 3)}
+          y={4 + Math.floor(i / 3) * 0}
+          width={9}
+          height={13}
+          rx={1.5}
+          fill={i % 2 ? p.dark : p.accent ?? p.main}
+          opacity={0.9}
+        />
+      ))}
+    </>
+  );
+}
+
+function ShelfSmallArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={24} />
+      {[30, 58].map((sx) => (
+        <rect key={sx} x={sx} y={30} width={4} height={34} fill={p.main} stroke={stroke(p)} />
+      ))}
+      {[30, 46, 62].map((y) => (
+        <rect key={y} x={28} y={y} width={36} height={3.5} rx={1.75} fill={p.light} />
+      ))}
+      {[0, 1, 2].map((i) => (
+        <rect key={i} x={34 + i * 10} y={18} width={7} height={12} rx={2} fill={i % 2 ? p.dark : p.accent ?? p.main} />
+      ))}
+    </>
+  );
+}
+
+function FilingArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={18} />
+      <rect x={42} y={18} width={36} height={50} rx={3} fill={p.main} stroke={stroke(p)} />
+      {[0, 1, 2, 3].map((i) => (
+        <g key={i}>
+          <rect x={45} y={21 + i * 12} width={30} height={9} rx={2} fill={p.light} />
+          <rect x={56} y={24 + i * 12} width={8} height={3} rx={1.5} fill={p.dark} />
+        </g>
+      ))}
+    </>
+  );
+}
+
+function MonitorArt({ p, w }: ShapeProps) {
+  const wide = Math.min(66, 40 + w * 26);
+  const x = (120 - wide) / 2;
+  return (
+    <>
+      <Shadow rx={22} />
+      <rect x={x} y={16} width={wide} height={30} rx={4} fill={p.dark} />
+      <rect x={x + 3} y={19} width={wide - 6} height={24} rx={2} fill="#cfe3f0" />
+      <rect x={x + wide / 2 - 4} y={46} width={8} height={10} fill={p.main} />
+      <rect x={x + wide / 2 - 13} y={55} width={26} height={5} rx={2.5} fill={p.main} stroke={stroke(p)} />
+    </>
+  );
+}
+
+function DeskTopArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={26} />
+      <rect x={30} y={40} width={60} height={18} rx={4} fill={p.main} stroke={stroke(p)} />
+      <rect x={36} y={32} width={26} height={8} rx={2} fill={p.light} />
+      <rect x={68} y={30} width={16} height={10} rx={4} fill={p.light} stroke={stroke(p)} />
+      <rect x={30} y={56} width={60} height={4} rx={2} fill={p.dark} opacity={0.5} />
+    </>
+  );
+}
+
+function TrayArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={26} />
+      <rect x={32} y={38} width={56} height={20} rx={4} fill={p.main} stroke={stroke(p)} />
+      <rect x={32} y={38} width={56} height={5} rx={2.5} fill={p.light} />
+      <path d="M60 38 v20" stroke={p.dark} strokeWidth={2} opacity={0.6} />
+      <rect x={36} y={32} width={48} height={7} rx={2} fill={p.light} opacity={0.8} />
+    </>
+  );
+}
+
+function CaddyArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={24} />
+      <rect x={38} y={32} width={44} height={28} rx={5} fill={p.main} stroke={stroke(p)} />
+      <rect x={42} y={28} width={36} height={7} rx={3} fill={p.light} />
+      <rect x={42} y={44} width={36} height={8} rx={2} fill={p.dark} opacity={0.35} />
+      <circle cx={60} cy={48} r={2.4} fill={p.light} />
+    </>
+  );
+}
+
+function BoardArt({ p, w }: ShapeProps) {
+  const wide = Math.min(76, 48 + w * 22);
+  const x = (120 - wide) / 2;
+  return (
+    <>
+      <rect x={x - 3} y={22} width={wide + 6} height={40} rx={4} fill={p.dark} />
+      <rect x={x} y={25} width={wide} height={34} rx={2} fill={p.light} />
+      {[0, 1, 2].map((i) => (
+        <rect
+          key={i}
+          x={x + 6}
+          y={32 + i * 9}
+          width={wide * (0.62 - i * 0.16)}
+          height={3}
+          rx={1.5}
+          fill={p.main}
+          opacity={0.8}
+        />
+      ))}
+    </>
+  );
+}
+
+function GlobeArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={22} />
+      <circle cx={60} cy={40} r={20} fill="#8fb0c9" stroke={p.dark} strokeWidth={2} />
+      <path d="M46 32 q8 6 4 14 q-4 8 6 10 q10 -2 10 -12 q0 -10 -8 -14 Z" fill="#5f8f7f" opacity={0.85} />
+      <circle cx={60} cy={40} r={20} fill="none" stroke={p.light} strokeWidth={2.5} />
+      <rect x={52} y={62} width={16} height={5} rx={2} fill={p.main} />
+      <rect x={58} y={56} width={4} height={8} fill={p.main} />
+    </>
+  );
+}
+
+function BustArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={18} />
+      <rect x={44} y={56} width={32} height={10} rx={2} fill={p.dark} />
+      <path d="M48 56 q0 -12 12 -12 q12 0 12 12 Z" fill={p.light} />
+      <rect x={52} y={36} width={16} height={10} fill={p.light} />
+      <ellipse cx={60} cy={28} rx={13} ry={15} fill={p.light} stroke={stroke(p)} />
+      <path d="M54 20 q6 -8 12 -2 q-6 -2 -12 2 Z" fill={p.main} />
+      <circle cx={55} cy={28} r={1.6} fill={p.dark} />
+      <circle cx={65} cy={28} r={1.6} fill={p.dark} />
+    </>
+  );
+}
+
+function LadderArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={26} />
+      <path d="M46 16 L40 68 M74 16 L80 68" stroke={p.main} strokeWidth={5} strokeLinecap="round" />
+      {[24, 34, 44, 54, 64].map((y) => (
+        <rect key={y} x={43 + (y - 16) * 0.03} y={y} width={35} height={3.6} rx={1.8} fill={p.light} />
+      ))}
+      <circle cx={40} cy={68} r={3.4} fill={p.dark} />
+      <circle cx={80} cy={68} r={3.4} fill={p.dark} />
+    </>
+  );
+}
+
+function CanRackArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={26} />
+      <rect x={28} y={28} width={64} height={36} rx={4} fill={p.main} stroke={stroke(p)} />
+      <rect x={28} y={44} width={64} height={4} fill={p.light} />
+      {[0, 1, 2, 3, 4, 5].map((i) => (
+        <g key={i}>
+          <circle
+            cx={40 + (i % 3) * 20}
+            cy={36 + Math.floor(i / 3) * 18}
+            r={7}
+            fill={i % 2 ? p.light : p.dark}
+            stroke={stroke(p)}
+          />
+          <circle cx={40 + (i % 3) * 20} cy={36 + Math.floor(i / 3) * 18} r={2.6} fill={p.accent ?? p.light} />
+        </g>
+      ))}
+    </>
+  );
+}
+
+function LazySusanArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={26} />
+      <ellipse cx={60} cy={48} rx={30} ry={11} fill={p.main} stroke={stroke(p)} />
+      <ellipse cx={60} cy={45} rx={24} ry={8} fill={p.light} />
+      <ellipse cx={60} cy={44} rx={7} ry={3} fill={p.dark} />
+      <path d="M36 44 l-5 -8 M84 44 l5 -8" stroke={p.dark} strokeWidth={3} strokeLinecap="round" />
+    </>
+  );
+}
+
+function CuttingBoardArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={26} />
+      <rect x={30} y={38} width={60} height={26} rx={5} fill={p.main} stroke={stroke(p)} />
+      <rect x={82} y={44} width={10} height={14} rx={4} fill={p.dark} />
+      <circle cx={88} cy={51} r={2.4} fill={p.light} />
+      <path d="M38 44 v14 M48 44 v14" stroke={p.light} strokeWidth={2} opacity={0.5} />
+    </>
+  );
+}
+
+function TileArt({ p, w }: ShapeProps) {
+  const wide = Math.min(84, 56 + w * 16);
+  const x = (120 - wide) / 2;
+  const cols = 6;
+  const rows = 3;
+  return (
+    <>
+      <rect x={x - 3} y={24} width={wide + 6} height={36} rx={3} fill={p.dark} />
+      {[0, 1, 2].map((r) =>
+        [0, 1, 2, 3, 4, 5].map((c) => (
+          <rect
+            key={`${r}${c}`}
+            x={x + c * (wide / cols)}
+            y={27 + r * (30 / rows)}
+            width={wide / cols - 2}
+            height={30 / rows - 2}
+            rx={1}
+            fill={(r + c) % 3 === 0 ? p.main : p.light}
+          />
+        )),
+      )}
+    </>
+  );
+}
+
+function SwingArt({ p, w }: ShapeProps) {
+  const wide = Math.min(76, 50 + w * 16);
+  const x = (120 - wide) / 2;
+  return (
+    <>
+      <Shadow rx={wide / 2} />
+      {[x, x + wide - 5].map((sx) => (
+        <rect key={sx} x={sx} y={14} width={5} height={52} fill={p.main} stroke={stroke(p)} />
+      ))}
+      <rect x={x - 4} y={12} width={wide + 8} height={5} rx={2.5} fill={p.main} />
+      <rect x={x + 3} y={44} width={wide - 6} height={7} rx={3} fill={p.light} stroke={stroke(p)} />
+      <rect x={x + 3} y={30} width={wide - 6} height={6} rx={3} fill={p.light} />
+      {[0, 1].map((i) => (
+        <path
+          key={i}
+          d={`M${x + 10 + i * (wide - 26)} 17 v14`}
+          stroke={p.dark}
+          strokeWidth={1.8}
+        />
+      ))}
+    </>
+  );
+}
+
+function ChimesArt({ p }: ShapeProps) {
+  return (
+    <>
+      <rect x={18} y={12} width={84} height={4} rx={2} fill={p.dark} />
+      <rect x={56} y={16} width={8} height={8} rx={2} fill={p.main} />
+      {[46, 56, 66, 76, 50].map((x, i) => (
+        <rect
+          key={x}
+          x={x - 2}
+          y={26 + i * 5}
+          width={4}
+          height={16 + i * 4}
+          rx={2}
+          fill={i % 2 ? p.light : p.main}
+        />
+      ))}
+      <rect x={52} y={62} width={16} height={12} rx={2} fill={p.light} stroke={stroke(p)} />
+    </>
+  );
+}
+
+function LanternArt({ p }: ShapeProps) {
+  return (
+    <>
+      <rect x={58} y={10} width={4} height={10} fill={p.dark} />
+      <ellipse cx={60} cy={42} rx={22} ry={26} fill={p.light} stroke={p.main} strokeWidth={2} />
+      <path d="M40 34 h40 M40 50 h40" stroke={p.main} strokeWidth={1.6} opacity={0.7} />
+      <rect x={52} y={14} width={16} height={6} rx={2} fill={p.main} />
+      <rect x={52} y={64} width={16} height={5} rx={2} fill={p.main} />
+    </>
+  );
+}
+
+function FeederArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={22} />
+      <path d="M36 34 L60 16 L84 34 Z" fill={p.main} stroke={stroke(p)} />
+      <rect x={40} y={34} width={40} height={28} rx={4} fill={p.light} stroke={stroke(p)} />
+      <circle cx={52} cy={46} r={4} fill={p.dark} />
+      <circle cx={68} cy={46} r={4} fill={p.dark} />
+      <rect x={60} y={52} width={3} height={14} fill={p.dark} />
+      <path d="M52 44 q-8 -6 -14 -2 M68 44 q8 -6 14 -2" stroke={p.dark} strokeWidth={2} fill="none" />
+    </>
+  );
+}
+
+function PlanterArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={30} />
+      <rect x={28} y={44} width={64} height={20} rx={3} fill={p.main} stroke={stroke(p)} />
+      <rect x={28} y={44} width={64} height={4} fill={p.light} />
+      {[0, 1, 2, 3, 4].map((i) => (
+        <g key={i}>
+          <path
+            d={`M${38 + i * 11} 44 q-4 -14 2 -22`}
+            stroke={p.dark}
+            strokeWidth={2.2}
+            fill="none"
+            strokeLinecap="round"
+          />
+          <ellipse cx={40 + i * 11} cy={24 + (i % 2) * 6} rx={7} ry={4.5} fill={p.accent ?? p.dark} />
+        </g>
+      ))}
+    </>
+  );
+}
+
+function ParasolArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={16} />
+      <rect x={58} y={26} width={4} height={42} fill={p.main} />
+      <path d="M60 14 a34 26 0 0 0 -34 26 h68 a34 26 0 0 0 -34 -26 Z" fill={p.main} stroke={stroke(p)} />
+      <path d="M60 14 v26 M42 18 q4 12 4 22 M78 18 q-4 12 -4 22" stroke={p.light} strokeWidth={1.6} fill="none" opacity={0.8} />
+    </>
+  );
+}
+
+function ValetArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={22} />
+      <ellipse cx={60} cy={64} rx={22} ry={6} fill={p.dark} />
+      <rect x={57} y={20} width={6} height={44} rx={3} fill={p.main} stroke={stroke(p)} />
+      <path d="M36 28 h48" stroke={p.light} strokeWidth={4} strokeLinecap="round" />
+      <circle cx={36} cy={30} r={3.4} fill={p.accent ?? p.dark} />
+      <circle cx={84} cy={30} r={3.4} fill={p.accent ?? p.dark} />
+      <path d="M60 20 q-6 -10 4 -14" stroke={p.light} strokeWidth={3} fill="none" strokeLinecap="round" />
+    </>
+  );
+}
+
+function HangerArt({ p }: ShapeProps) {
+  return (
+    <>
+      <path d="M60 18 q6 0 6 6 q0 5 -5 6" stroke={p.dark} strokeWidth={2.6} fill="none" strokeLinecap="round" />
+      <path d="M56 30 L28 46 h64 L64 30 Z" fill={p.main} stroke={stroke(p)} />
+      <path d="M28 46 h64" stroke={p.light} strokeWidth={3} />
+    </>
+  );
+}
+
+function ShoeRackArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={30} />
+      {[28, 30].map((sx) => (
+        <rect key={sx} x={sx === 28 ? 28 : 88} y={22} width={4} height={46} fill={p.main} />
+      ))}
+      {[26, 44, 62].map((y) => (
+        <g key={y}>
+          <rect x={26} y={y} width={68} height={3.5} rx={1.75} fill={p.light} />
+          {[0, 1].map((i) => (
+            <rect key={i} x={34 + i * 26} y={y - 8} width={18} height={8} rx={3} fill={i ? p.main : p.dark} stroke={stroke(p)} />
+          ))}
+        </g>
+      ))}
+    </>
+  );
+}
+
+function MailboxArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={18} />
+      <rect x={44} y={30} width={34} height={26} rx={9} fill={p.main} stroke={stroke(p)} />
+      <rect x={52} y={22} width={18} height={12} rx={5} fill={p.light} stroke={stroke(p)} />
+      <rect x={60} y={56} width={5} height={14} fill={p.dark} />
+      <rect x={68} y={26} width={12} height={4} rx={2} fill={p.accent ?? p.light} />
+    </>
+  );
+}
+
+function FirePitArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={26} />
+      <ellipse cx={60} cy={52} rx={28} ry={14} fill={p.main} stroke={stroke(p)} />
+      <ellipse cx={60} cy={50} rx={21} ry={10} fill="#2f2a24" />
+      {[0, 1, 2, 3].map((i) => (
+        <rect
+          key={i}
+          x={48 + i * 6}
+          y={40 + (i % 2) * 5}
+          width={4}
+          height={16}
+          rx={2}
+          fill={p.light}
+          transform={`rotate(${-24 + i * 16} ${50 + i * 6} ${48 + (i % 2) * 5})`}
+        />
+      ))}
+      <path d="M56 44 q4 -8 8 0 q-4 6 -8 0 Z" fill="#ff9d4d" />
+    </>
+  );
+}
+
+function TrellisArt({ p }: ShapeProps) {
+  return (
+    <>
+      <rect x={30} y={14} width={4} height={56} fill={p.main} />
+      <rect x={86} y={14} width={4} height={56} fill={p.main} />
+      {[24, 36, 48, 60].map((y) => (
+        <rect key={y} x={30} y={y} width={60} height={3.4} rx={1.7} fill={p.light} />
+      ))}
+      {[0, 1, 2].map((i) => (
+        <ellipse key={i} cx={46 + i * 16} cy={36 + (i % 2) * 18} rx={9} ry={6} fill={p.accent ?? p.dark} opacity={0.9} />
+      ))}
+    </>
+  );
+}
+
+function SpeakerArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={20} />
+      <rect x={44} y={20} width={32} height={46} rx={4} fill={p.dark} stroke={stroke(p)} />
+      <circle cx={60} cy={34} r={8} fill={p.light} />
+      <circle cx={60} cy={34} r={3.4} fill={p.dark} />
+      <circle cx={60} cy={54} r={11} fill={p.light} />
+      <circle cx={60} cy={54} r={4.4} fill={p.dark} />
+    </>
+  );
+}
+
+function RollerArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={18} />
+      <rect x={34} y={38} width={52} height={22} rx={11} fill={p.main} stroke={stroke(p)} />
+      <rect x={52} y={38} width={16} height={22} fill={p.dark} />
+      <rect x={30} y={44} width={6} height={10} rx={2} fill={p.light} />
+    </>
+  );
+}
+
+function CoilArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={22} />
+      <ellipse cx={56} cy={48} rx={22} ry={16} fill="none" stroke={p.main} strokeWidth={4} />
+      <ellipse cx={60} cy={44} rx={16} ry={11} fill="none" stroke={p.light} strokeWidth={3.4} />
+      <rect x={78} y={40} width={5} height={16} rx={2.5} fill={p.dark} />
+      <rect x={86} y={40} width={5} height={16} rx={2.5} fill={p.dark} />
+    </>
+  );
+}
+
+function LuggageArt({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={26} />
+      <path d="M34 40 L86 40 L86 46 L34 46 Z" fill={p.main} stroke={stroke(p)} />
+      {[34, 44, 54, 64, 74].map((x) => (
+        <rect key={x} x={x} y={46} width={3} height={20} fill={p.light} />
+      ))}
+      <path d="M38 66 L46 40 M84 66 L76 40" stroke={p.dark} strokeWidth={3} strokeLinecap="round" />
+    </>
+  );
+}
+
+function Mobile2({ p }: ShapeProps) {
+  return (
+    <>
+      <rect x={57} y={8} width={6} height={8} rx={2} fill={p.dark} />
+      <circle cx={60} cy={20} r={6} fill={p.light} stroke={stroke(p)} />
+      {[40, 60, 80].map((x, i) => (
+        <g key={x}>
+          <path d={`M60 20 L${x} 30`} stroke={p.dark} strokeWidth={1.6} />
+          <path d={`M${x} 30 v${10 + i * 6}`} stroke={p.dark} strokeWidth={1.4} />
+          <circle cx={x} cy={44 + i * 6} r={6 - i} fill={[p.main, p.light, p.accent ?? p.main][i]} stroke={stroke(p)} />
+        </g>
+      ))}
+      <rect x={46} y={62} width={28} height={8} rx={3} fill={p.light} opacity={0.8} />
+    </>
+  );
+}
+
+function PlateTree2({ p }: ShapeProps) {
+  return (
+    <>
+      <Shadow rx={18} />
+      <rect x={57} y={20} width={6} height={46} rx={3} fill={p.main} stroke={stroke(p)} />
+      <rect x={44} y={64} width={32} height={6} rx={3} fill={p.dark} />
+      {[26, 38, 50].map((y, i) => (
+        <g key={y}>
+          <rect x={63} y={y} width={4} height={3} fill={p.light} />
+          <ellipse cx={76} cy={y + 1.5} rx={4 + i} ry={13 - i * 2} fill={i % 2 ? p.main : p.dark} stroke={stroke(p)} />
+        </g>
+      ))}
+      <ellipse cx={44} cy={30} rx={4} ry={12} fill={p.dark} stroke={stroke(p)} />
+    </>
+  );
+}
+
+function NightlightArt({ p }: ShapeProps) {
+  return (
+    <>
+      <rect x={40} y={28} width={40} height={30} rx={8} fill={p.main} stroke={stroke(p)} />
+      <circle cx={60} cy={43} r={10} fill="#ffe9a8" />
+      <circle cx={60} cy={43} r={16} fill="#ffe9a8" opacity={0.35} />
+      <rect x={52} y={60} width={16} height={8} rx={3} fill={p.dark} />
+    </>
+  );
+}
+
 // --- kind -> shape -----------------------------------------------------------
 
 type Shape = (props: ShapeProps) => ReactElement;
@@ -1316,6 +2110,167 @@ const DINING_SHAPES: Record<string, Shape> = {
   bench: Bench2,
 };
 
+const NURSERY_SHAPES: Record<string, Shape> = {
+  crib: CribArt,
+  bassinet: CribArt,
+  bunk: BunkArt,
+  changing: Counter,
+  glider: Chair,
+  pail: BinArt,
+  mobile: Mobile2,
+  canopy: Hanging,
+  monitor: CaddyArt,
+  soundmachine: Decor,
+  nightlight: NightlightArt,
+  toybasket: BinArt,
+  moses: BinArt,
+  toybin: Cart,
+  pad: Cushion,
+  horse: HorseArt,
+  starprojector: Decor,
+  glowstar: Artwork,
+  bunting: Artwork,
+  booklight: Sconce,
+};
+
+const GYM_SHAPES: Record<string, Shape> = {
+  treadmill: MachineArt,
+  bike: MachineArt,
+  rower: MachineArt,
+  squatrack: RackArt,
+  cablemachine: RackArt,
+  abwheel: RackArt,
+  pullup: RackArt,
+  weightbench: Bench2,
+  dumbbellrack: DumbbellArt,
+  kettlebell: DumbbellArt,
+  medball: BallArt,
+  punchingbag: PunchingBagArt,
+  platetree: PlateTree2,
+  yogamat: Rug,
+  foamroller: RollerArt,
+  step: StepArt,
+  jumprope: CoilArt,
+  bands: CoilArt,
+  bottlestation: ShelvingArt,
+  soundsystem: SpeakerArt,
+};
+
+const LAUNDRY_SHAPES: Record<string, Shape> = {
+  washer: WasherArt,
+  dryer: WasherArt,
+  stackpair: WasherArt,
+  foldcounter: Counter,
+  utilsink: SinkUnit,
+  laundrycab: Counter,
+  laundrywall: Counter,
+  rod: RodArt,
+  dryingrack: RackArt,
+  ironingboard: IroningArt,
+  iron: Decor,
+  clothespin: JarArt,
+  detergent: JarArt,
+  hamper: BinArt,
+  lintbin: BinArt,
+  trolley: Cart,
+  utilityshelf: ShelvingArt,
+  hookrail: HookRailArt,
+  boardcover: Decor,
+  laundrymat: Rug,
+};
+
+const OFFICE_SHAPES: Record<string, Shape> = {
+  desk: Desk,
+  standing: Desk,
+  taskchair: Chair,
+  filing: FilingArt,
+  monitor: MonitorArt,
+  keyboard: DeskTopArt,
+  mouse: DeskTopArt,
+  footrest: StepArt,
+  cabletray: TrayArt,
+  organiser: TrayArt,
+  doctray: TrayArt,
+  tissue: TrayArt,
+  printer: CaddyArt,
+  wastebasket: BinArt,
+  whiteboard: BoardArt,
+  pinboard: BoardArt,
+  globe: GlobeArt,
+  glassesstand: Decor,
+  bust: BustArt,
+  rollingladder: LadderArt,
+};
+
+const PANTRY_SHAPES: Record<string, Shape> = {
+  pantryshelf: ShelvingArt,
+  pantrycab: Cabinet,
+  pantrycart: Cart,
+  pantrywine: WineRack,
+  stepstool: StepArt,
+  clearbin: BinArt,
+  canorg: CanRackArt,
+  lazysusan: LazySusanArt,
+  jarlabels: Decor,
+  chalkboard: BoardArt,
+  spicerack: ShelfSmallArt,
+  breadbox: CaddyArt,
+  eggshelf: TrayArt,
+  pantrydrawer: Cabinet,
+  crate: BinArt,
+  apothecary: JarArt,
+  crock: CrockArt,
+  board: CuttingBoardArt,
+  apronhook: HookRailArt,
+  backsplash: TileArt,
+};
+
+const OUTDOOR_SHAPES: Record<string, Shape> = {
+  porchswing: SwingArt,
+  rattansofa: Sofa,
+  rattanchair: Chair,
+  wickertable: Table,
+  outdoorside: Table,
+  bistro: Table,
+  chimes: ChimesArt,
+  lantern: LanternArt,
+  feeder: FeederArt,
+  outdoorrug: Rug,
+  doormat: Rug,
+  parasol: ParasolArt,
+  gardenstool: StepArt,
+  planter: PlanterArt,
+  trellis: TrellisArt,
+  wateringcan: CrockArt,
+  hosereel: CaddyArt,
+  outdoorbench: Bench2,
+  mailbox: MailboxArt,
+  firepit: FirePitArt,
+};
+
+const CLOSET_SHAPES: Record<string, Shape> = {
+  closetshelf: ShelvingArt,
+  rod2: RodArt,
+  hangerbar: RodArt,
+  valet: ValetArt,
+  hanger: HangerArt,
+  cedar: HangerArt,
+  divider: TrayArt,
+  jewelorganiser: TrayArt,
+  perftray: TrayArt,
+  shoerack: ShoeRackArt,
+  closetdrawer: FilingArt,
+  closetisland: Cabinet,
+  fullmirror: Mirror,
+  closetlight: StripLight,
+  closetbench: Bench2,
+  belt: HookRailArt,
+  closethook: HookRailArt,
+  luggage: LuggageArt,
+  hatshelf: ShelfSmallArt,
+  basketbin: BinArt,
+};
+
 /**
  * Resolve the artwork for an item.
  *
@@ -1324,12 +2279,19 @@ const DINING_SHAPES: Record<string, Shape> = {
  * wall-bed *and* a bed). Picking the silhouette from the category and then
  * refining it with the kind keeps "Cloud Panel Bed" looking like a bed.
  */
-function resolveShape(item: FurnItem): Shape {
+export function resolveShape(item: FurnItem): Shape {
   const k = item.kind;
 
   const byType: Partial<Record<FurnItem['type'], Record<string, Shape>>> = {
     kitchen: KITCHEN_SHAPES,
     dining: DINING_SHAPES,
+    nursery: NURSERY_SHAPES,
+    gym: GYM_SHAPES,
+    laundry: LAUNDRY_SHAPES,
+    office: OFFICE_SHAPES,
+    pantry: PANTRY_SHAPES,
+    outdoor: OUTDOOR_SHAPES,
+    closet: CLOSET_SHAPES,
     seating: {
       ...SEATING_WIDE,
       ...SEATING_ONE,
@@ -1402,6 +2364,13 @@ function resolveShape(item: FurnItem): Shape {
     toilet: Toilet,
     towelrack: TowelRack,
     vamirror: Mirror,
+    nursery: CribArt,
+    gym: MachineArt,
+    laundry: Counter,
+    office: Desk,
+    pantry: Cabinet,
+    outdoor: Chair,
+    closet: ShelvingArt,
   };
   return fallback[item.type] ?? Decor;
 }

@@ -98,9 +98,12 @@ console.log('\nAn explicit ceiling light is never doubled up:');
 
 console.log('\nEvery room lists both furniture and design objects:');
 {
-  // A preset of only one category reads as a half-furnished room.
+  // A preset of only one category reads as a half-furnished room. The
+  // rule-driven categories count as furniture too: a gym with no gym in it, or a
+  // laundry with no washer, is exactly the failure this check exists for.
   const FURNITURE: FurnType[] = ['seating', 'tables', 'storage', 'beds', 'kitchen', 'dining',
-    'vanity', 'bathtub', 'shower', 'toilet'];
+    'vanity', 'bathtub', 'shower', 'toilet',
+    'nursery', 'gym', 'laundry', 'office', 'pantry', 'outdoor', 'closet'];
   const tooThin = ROOM_KIND_ORDER.filter((k) => {
     const steps = withCeilingLight(PRESETS[k] ?? []);
     const hasFurniture = steps.some((s) => FURNITURE.includes(s.type));
@@ -126,11 +129,17 @@ console.log('\nRoom lists are substantive:');
 
 console.log('\nHallways and closets stay walkable:');
 {
-  // A corridor must not be filled like a living room.
-  for (const k of ['hallway', 'entryway', 'closet'] as RoomKind[]) {
+  // A corridor must not be filled like a living room. A walk-in closet gets a
+  // little more room than one, because its rules genuinely name fifteen things
+  // — but it still has to stay well short of a living room.
+  for (const k of ['hallway', 'entryway'] as RoomKind[]) {
     const n = (PRESETS[k] ?? []).reduce((a, s) => a + (s.count ?? 1), 0);
     ok(`${k} stays restrained`, n <= 16, `${n} steps`);
   }
+  const closetN = (PRESETS.closet ?? []).reduce((a, s) => a + (s.count ?? 1), 0);
+  const livingN = (PRESETS.living ?? []).reduce((a, s) => a + (s.count ?? 1), 0);
+  ok('closet stays restrained', closetN <= 20, `${closetN} steps`);
+  ok('and well short of a living room', closetN < livingN, `${closetN} vs ${livingN}`);
 }
 
 console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`} (${checks} total)`);
