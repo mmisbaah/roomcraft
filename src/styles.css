@@ -53,6 +53,8 @@ kbd {
   height: 100%;
   display: flex;
   flex-direction: column;
+  padding-top: 10px;
+  box-sizing: border-box;
 }
 
 /* ---------------------------------------------------------------- topbar */
