@@ -177,8 +177,8 @@ console.log('\nRule 3 — one of each kind in the room:');
   const kitchen = fill('kitchen', 5, 4.5);
   const basecabs = kitchen.defs.filter((d) => d.kind === 'basecab').length;
   ok('built-in joinery is exempt from the cap', basecabs >= 2, `${basecabs} base cabinets`);
-  const living = fill('living', 5, 4.5);
-  const cushions = living.defs.filter((d) => d.kind === 'pillow').length;
+  const bedroom = fill('bedroom', 5, 4.5);
+  const cushions = bedroom.defs.filter((d) => d.kind === 'pillow').length;
   ok('paired decor is exempt from the cap', cushions >= 2, `${cushions} cushions`);
 }
 

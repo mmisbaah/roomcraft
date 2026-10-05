@@ -165,15 +165,12 @@ export const WALL_FURNITURE_TYPES: ReadonlySet<FurnType> = new Set([
 ]);
 
 /**
- * How far from the room's edge a storage/kitchen/closet piece may sit while
- * still counting as "next to the wall".
- *
- * Deeper than this and it parks itself in the middle of the room; tighter
- * than this and the half-metre placement grid occasionally refuses an
- * otherwise flush piece (a 0.6 m run of cabinets snaps to a 0.2 m offset), so
- * 0.2 m is the slack the fill negotiates through.
+ * How far from the room's edge a storage/kitchen/closet piece may sit and
+ * still count as "at the wall". Kept at 10 cm so the flashing casegoods
+ * in a walkthrough view reads against the skirting rather than free of it,
+ * while a 0.5 m cell gap occasionally forces this slack for a 0.6 m run.
  */
-export const WALL_FURNITURE_GAP = 0.2;
+export const WALL_FURNITURE_GAP = 0.1;
 
 /** A piece counts as hugging the wall when one edge lands within the slack. */
 export function hugsWall(
@@ -231,14 +228,6 @@ export function rotRectInsidePoly(poly: Vec2[], x: number, y: number, w: number,
   }
   return true;
 }
-
-/**
- * The one "surface" item that may live on seating: cushions and throws are
- * placed exactly on the chair/bed they puff up. Built separately from kinds
- * because every seat — sofa, dining chair, armchair — takes the same kind.
- */
-const sitsOnSeats = (f: FurnItem) =>
-  f.kind === 'pillow' || f.spec?.pillow === true;
 
 /** Top surface height of a floor item, or null when it can't support anything. */
 export function supportTop(f: FurnItem): number | null {
@@ -755,11 +744,8 @@ function findSurfaceSpot(
     if (!f) continue;
     const top = supportTop(f);
     if (top == null) continue;
-    // Nothing stands on seating. A mug or a vase on a sofa is the fill's way
-    // of running out of table, and a sofa that can carry things is drawn as a
-    // sideboard. The exception buys two square of canvas softness: pillows and
-    // throws are the one thing a seat exists to hold.
-    if (f.type === 'seating' && !sitsOnSeats(item)) continue;
+    // Nothing stands on seating, not even a cushion.
+    if (f.type === 'seating') continue;
     const used = items.filter((o) => {
       if (o.uid === it.uid) return false;
       const of = byId.get(o.itemId);
