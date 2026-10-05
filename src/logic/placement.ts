@@ -183,9 +183,24 @@ export function hugsWall(
   return rectGapToPoly(poly, x, y, w, d) <= WALL_FURNITURE_GAP + 1e-9;
 }
 
+/**
+ * Soft seating pieces that are allowed to read as large sofas for the fill —
+ * garden sofas and loveseats for a sightline. Their silhouette is wide and low
+ * and they have nobaofway to be walked around a table, so the layout puts
+ * them on a wall like any bookcase.
+ */
+const WALL_SEAT_KINDS: ReadonlySet<string> = new Set([
+  'sofa',
+  'sectional',
+  'loveseat',
+  'rattansofa',
+]);
+
 /** Floor-standing storage/kitchen/closet pieces belong to a wall. */
 function wantsWall(f: FurnItem): boolean {
-  return f.mount === 'floor' && !isFlat(f) && WALL_FURNITURE_TYPES.has(f.type);
+  if (f.mount !== 'floor' || isFlat(f)) return false;
+  if (WALL_FURNITURE_TYPES.has(f.type)) return true;
+  return f.type === 'seating' && WALL_SEAT_KINDS.has(f.kind);
 }
 
 const normDeg = (r: number) => ((r % 360) + 360) % 360;
@@ -1957,13 +1972,11 @@ const FLOOR_PIECE_LIMIT_BY_KIND: Partial<Record<RoomKind, number>> = {
   laundry: 10,
   library: 10,
   sunroom: 10,
+  office: 10,
+  study: 10,
+  entryway: 12,
   pantry: 9,
   kids: 9,
-  // Every piece a hall calls for is small — coat rack, umbrella stand, baskets,
-  // ottomans, consoles tenth of a square metre each — so nine of them cannot
-  // even touch the coverage floor in a room of any real size, and a large
-  // entryway stalled at ~8.5%.
-  entryway: 12,
 };
 
 /** Floor-coverage allowance for a room of this size. */
