@@ -332,6 +332,8 @@ export function canPlace(
   if (!cells) return false;
   for (const idx of cells) if (grid.free[idx] !== 1) return false;
   if (isFlat(item)) return true;
+  // Nothing may crowd a seat's face either
+  if (!seatFrontClear(items, byId, x, y, w, d, excludeUid, item.type)) return false;
 
   // Exact rect overlap, not "do we share a grid cell". Two footprints can
   // overlap by most of half a cell without sharing one, which let the fill
@@ -890,6 +892,9 @@ function findFloorSpot(
         // Dressing) belong against a wall, not parked free in the room. Done
         // pre-score so no candidate that fails this can still win.
         if (wantsWall(item) && !hugsWall(poly, x, y, w, d)) continue;
+        // Rule — nothing may crowd a seat's face: the 2 ft in front of any
+        // seating must stay clear.
+        if (!seatFrontClear(items, byId, x, y, w, d, undefined, item.type)) continue;
         // Rule 1 — a floor or table lamp takes a position that keeps the
         // spacing from every other light. Excluding positions here rather than
         // rejecting the winner afterwards is what lets a lamp take the far
@@ -1033,6 +1038,74 @@ function snapRot(desiredFront: Vec2): number {
   return best;
 }
 
+/**
+ * The clear strip in front of a seat — 2 feet (0.6 m) deep, as wide as the seat.
+ *
+ * Nothing may sit inside the reach of a seating piece: once a sideboard
+ * shrinks the space in front of it, a chair cannot be pulled out and a sofa
+ * cannot be sat in. Matching tolerance is RAD, because we snap orientation
+ * to 90°, the about/slot of a 0.4 m 0.5-cellbased item is naturally along
+ * two-axis.
+ */
+const FRONT_CLEARANCE = 0.6;
+
+export function seatFrontClear(
+  items: PlacedItem[],
+  byId: Map<string, FurnItem>,
+  x: number,
+  y: number,
+  w: number,
+  d: number,
+  excludeUid?: string,
+  candidateType?: FurnType,
+): boolean {
+  for (const o of items) {
+    if (o.uid === excludeUid) continue;
+    const of = byId.get(o.itemId);
+    if (!of || of.mount !== 'floor' || isFlat(of) || of.type !== 'seating') continue;
+    const os = rotatedSize(of.w, of.d, o.rot);
+    const fd = frontDir(o.rot);
+    let left: number;
+    let top: number;
+    let bw: number;
+    let bh: number;
+    if (Math.abs(fd.y) > 0.5) {
+      bw = os.w;
+      bh = FRONT_CLEARANCE;
+      left = o.x - os.w / 2;
+      top = fd.y > 0 ? o.y + os.d / 2 : o.y - os.d / 2 - FRONT_CLEARANCE;
+    } else {
+      bw = FRONT_CLEARANCE;
+      bh = os.d;
+      left = fd.x > 0 ? o.x + os.w / 2 : o.x - os.w / 2 - FRONT_CLEARANCE;
+      top = o.y - os.d / 2;
+    }
+    const cx = left + bw / 2;
+    const cy = top + bh / 2;
+    // The strip flags anything 'not a seat's table and not a seat' that falls in it.
+    const blocked = items.some((p) => {
+      if (p.uid === excludeUid || p.uid === o.uid) return false;
+      const pf = byId.get(p.itemId);
+      if (!pf || pf.mount !== 'floor' || isFlat(pf)) return false;
+      if (pf.type === 'tables' || pf.type === 'seating' || pf.type === 'dining') return false;
+      const ps = rotatedSize(pf.w, pf.d, p.rot);
+      const inside = rectsOverlap(p.x, p.y, ps.w, ps.d, cx, cy, bw, bh);
+      return inside;
+    });
+    if (blocked) return false;
+    if (rectsOverlap(x, y, w, d, cx, cy, bw, bh)) {
+      // The moving candidate is allowed through the strip only when it is a
+      // sibling seating piece or the seat's own table: rule 3 cannot be
+      // satisfied from a table-side gap alone.
+      if (candidateType === 'tables' || candidateType === 'seating' || candidateType === 'dining') {
+        continue;
+      }
+      return false;
+    }
+  }
+  return true;
+}
+
 function norm2(v: Vec2): Vec2 {
   const l = Math.hypot(v.x, v.y);
   return l < 1e-9 ? { x: 0, y: 1 } : { x: v.x / l, y: v.y / l };
@@ -1149,6 +1222,7 @@ export function strictFit(
   // front faces the middle of the room — so the placement rule for them is
   // "against the wall", and corrective slides may not move one off it.
   if (wantsWall(item) && !hugsWall(poly, x, y, w, d)) return false;
+  if (!seatFrontClear(items, byId, x, y, w, d, excludeUid, item.type)) return false;
   for (const o of items) {
     if (o.uid === excludeUid) continue;
     const f = byId.get(o.itemId);

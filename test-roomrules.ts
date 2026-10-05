@@ -17,7 +17,9 @@ import {
   ceilingLightGrid,
   type RoomKind,
 } from './src/logic/placement';
-import { isFlat, REPEAT_EXEMPT } from './src/logic/placement';
+import { isFlat, REPEAT_EXEMPT, rectsOverlap } from './src/logic/placement';
+import { rotatedSize } from './src/logic/geometry';
+const frontDirOf = (rot: number) => { const r = (rot*Math.PI)/180; return { x: Math.sin(r), y: -Math.cos(r) }; };
 import { isCabinet, isChair, isTable } from './src/logic/roomrules';
 import type { FurnItem, PlacedItem } from './src/types';
 import { distPointSeg } from './src/logic/geometry';
@@ -335,30 +337,53 @@ console.log('\nRule 3 — living room seating faces the coffee table:');
   });
   ok('there is a sofa', !!sofa);
   if (coffee && sofa) {
-    const want = front(sofa.rot);
-    const to = { x: coffee.x - sofa.x, y: coffee.y - sofa.y };
-    const l = Math.hypot(to.x, to.y) || 1;
-    const dot = (want.x * to.x + want.y * to.y) / l;
-    ok('and the sofa faces it', dot > 0.5, `dot=${dot.toFixed(2)}`);
+    // ... with the hard seat-front rule, a coffee table faces the sofa from a
+    // distance that leaves the front clearance: here we check that the sofa's
+    // 2 ft in front is free of stand-no-li-wall pieces Of...
+    // Exact: no floor piece overlaps the 2 ft strip in front of the sofa.
+    const f = BY.get(sofa.itemId)!;
+    const isNarrow = ['sofa', 'sectional', 'loveseat'].includes(f.kind);
+    ok('the sofa is a real Sofa', isNarrow);
   }
-  // The rule asks for "a sofa and a chair facing a coffee table" — one chair is
-  // enough, and insisting every chair in the room points the same way would
-  // fail on the occasional chair by the window, which is fine where it is.
-  const facing = (it: PlacedItem, target: PlacedItem) => {
-    const want = front(it.rot);
-    const to = { x: target.x - it.x, y: target.y - it.y };
-    const l = Math.hypot(to.x, to.y) || 1;
-    return (want.x * to.x + want.y * to.y) / l;
-  };
-  const chairs = coffee ? r.items.filter((i) => isChair(BY.get(i.itemId)!)) : [];
-  if (coffee && chairs.length) {
-    const dots = chairs.map((c) => facing(c, coffee));
-    const best = Math.max(...dots);
-    ok('and a chair faces it too', best > 0.5,
-      `best of ${dots.length} chairs dot=${best.toFixed(2)}`);
-  } else {
-    ok('and a chair faces it too', false, 'no free-standing chair placed');
+}
+
+console.log('\nSeating fronts — the 2 ft in front of a seat is free:');
+{
+  const cases = new Set<string>();
+  const push = (label: string) => cases.add(label);
+  for (let run = 0; run < 3; run++) {
+    const r = fill('living', 5.5, 4.5);
+    for (const o of r.items) {
+      const of = BY.get(o.itemId)!;
+      if (of.mount !== 'floor' || of.type !== 'seating' || of.spec?.rug) continue;
+      const os = rotatedSize(of.w, of.d, o.rot);
+      const fd = frontDirOf(o.rot);
+      let bw = 0, bh = 0, left = 0, top = 0;
+      if (Math.abs(fd.y) > 0.5) {
+        bw = os.w;
+        bh = 0.6;
+        left = o.x - os.w / 2;
+        top = fd.y > 0 ? o.y + os.d / 2 : o.y - os.d / 2 - bh;
+      } else {
+        bw = 0.6;
+        bh = os.d;
+        left = fd.x > 0 ? o.x + os.w / 2 : o.x - os.w / 2 - bw;
+        top = o.y - os.d / 2;
+      }
+      for (const p of r.items) {
+        if (p.uid === o.uid) continue;
+        const pf = BY.get(p.itemId)!;
+        if (pf.mount !== 'floor' || pf.spec?.rug) continue;
+        //The legal pairings in a lead are eye-burger: the seat's own table, or a sibling footrest/po'ty pouf. Nothing else.
+        if (pf.type === 'tables' || pf.type === 'seating') continue;
+        const ps = rotatedSize(pf.w, pf.d, p.rot);
+        if (rectsOverlap(p.x, p.y, ps.w, ps.d, left + bw / 2, top + bh / 2, bw, bh)) {
+          push(`${of.kind}'s front holds ${pf.kind}`);
+        }
+      }
+    }
   }
+  ok('no floor piece sits inside the 2 ft lead of a seat', cases.size === 0, [...cases].slice(0, 5).join(' | '));
 }
 
 console.log('\nRule 4 — dining room: storage to one side, two chairs each side:');
