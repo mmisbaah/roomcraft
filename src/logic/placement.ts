@@ -1087,7 +1087,10 @@ export function seatFrontClear(
       if (p.uid === excludeUid || p.uid === o.uid) return false;
       const pf = byId.get(p.itemId);
       if (!pf || pf.mount !== 'floor' || isFlat(pf)) return false;
-      if (pf.type === 'tables' || pf.type === 'seating' || pf.type === 'dining') return false;
+      // Tables, dining sets, other seats and office desks are the only
+      // furniture that may stand in the strip — they are all of them the
+      // piece the seat belongs with.
+      if (pf.type === 'tables' || pf.type === 'seating' || pf.type === 'dining' || pf.type === 'office') return false;
       const ps = rotatedSize(pf.w, pf.d, p.rot);
       const inside = rectsOverlap(p.x, p.y, ps.w, ps.d, cx, cy, bw, bh);
       return inside;
@@ -1097,7 +1100,7 @@ export function seatFrontClear(
       // The moving candidate is allowed through the strip only when it is a
       // sibling seating piece or the seat's own table: rule 3 cannot be
       // satisfied from a table-side gap alone.
-      if (candidateType === 'tables' || candidateType === 'seating' || candidateType === 'dining') {
+      if (candidateType === 'tables' || candidateType === 'seating' || candidateType === 'dining' || candidateType === 'office') {
         continue;
       }
       return false;
@@ -2048,8 +2051,9 @@ const FLOOR_PIECE_LIMIT_BY_KIND: Partial<Record<RoomKind, number>> = {
   sunroom: 10,
   office: 10,
   study: 10,
+  living: 12,
   entryway: 12,
-  pantry: 9,
+  pantry: 12,
   kids: 9,
 };
 

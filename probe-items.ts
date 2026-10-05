@@ -17,7 +17,7 @@ S().aiFill();
 const mine = S().items.filter((i) => i.roomId === room.id);
 for (const it of mine) {
   const f = BY.get(it.itemId)!;
-  console.log(`  ${f.mount.padEnd(8)} ${f.type.padEnd(10)} ${f.kind.padEnd(13)} ${f.name}  at ${it.x.toFixed(2)},${it.y.toFixed(2)}`);
+  console.log(`  ${f.mount.padEnd(8)} ${f.type.padEnd(10)} ${f.kind.padEnd(13)} ${f.name}  at ${it.x.toFixed(2)},${it.y.toFixed(2)} rot=${it.rot} w=${f.w} x d=${f.d}`);
 }
 console.log('toast:', S().toast?.msg ?? S().toastMsg ?? '(none)');
 S().clearRoom();

@@ -374,8 +374,9 @@ console.log('\nSeating fronts — the 2 ft in front of a seat is free:');
         if (p.uid === o.uid) continue;
         const pf = BY.get(p.itemId)!;
         if (pf.mount !== 'floor' || pf.spec?.rug) continue;
-        //The legal pairings in a lead are eye-burger: the seat's own table, or a sibling footrest/po'ty pouf. Nothing else.
-        if (pf.type === 'tables' || pf.type === 'seating') continue;
+        //The legal pairings in a lead: the seat's own table, sibling seats, a
+        // dining set, or an office desk. Nothing else.
+        if (pf.type === 'tables' || pf.type === 'dining' || pf.type === 'office' || pf.type === 'seating') continue;
         const ps = rotatedSize(pf.w, pf.d, p.rot);
         if (rectsOverlap(p.x, p.y, ps.w, ps.d, left + bw / 2, top + bh / 2, bw, bh)) {
           push(`${of.kind}'s front holds ${pf.kind}`);

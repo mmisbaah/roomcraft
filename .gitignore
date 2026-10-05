@@ -3,4 +3,6 @@ test-*.cjs
 
 node_modules/
 dist/
+dist-electron/probe-*.cjs
+measure-density.cjs
 dist-electron/
